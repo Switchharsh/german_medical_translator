@@ -1,0 +1,65 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "medmt-eval"
+version = "0.1.0"
+description = "Reproducible EN↔DE medical MT evaluation with clinical information-loss checks"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "Apache-2.0"}
+authors = [{name = "Medical MT Evaluation"}]
+dependencies = [
+  "sacrebleu>=2.4,<3",
+]
+
+[project.optional-dependencies]
+mt = [
+  "torch>=2.2",
+  "transformers>=4.44",
+  "sentencepiece>=0.2",
+  "accelerate>=0.33",
+]
+neural = [
+  "unbabel-comet>=2.2",
+  "bert-score>=0.3.13",
+]
+storage = [
+  "pandas>=2.1",
+  "pyarrow>=14",
+]
+plot = ["matplotlib>=3.8"]
+deepl = ["requests>=2.31"]
+dev = ["pytest>=8", "ruff>=0.6"]
+all = [
+  "torch>=2.2",
+  "transformers>=4.44",
+  "sentencepiece>=0.2",
+  "accelerate>=0.33",
+  "unbabel-comet>=2.2",
+  "bert-score>=0.3.13",
+  "pandas>=2.1",
+  "pyarrow>=14",
+  "matplotlib>=3.8",
+  "requests>=2.31",
+  "pytest>=8",
+  "ruff>=0.6",
+]
+
+[project.scripts]
+medmt-eval = "medmt_eval.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"

@@ -1,0 +1,18 @@
+# Example configuration recorded alongside an experiment. CLI flags take precedence.
+experiment_name: stage1-opus-en-de
+model:
+  name: opus
+  model_id: null
+  batch_size: 8
+  num_beams: 4
+  max_input_tokens: 512
+data:
+  input: data/synthetic/chest_ct_en_de.jsonl
+  src_lang: en
+  tgt_lang: de
+metrics:
+  surface: [bleu, chrf++, ter]
+  clinical_rules: [negation, laterality, measurement]
+statistics:
+  paired_bootstrap_resamples: 2000
+  seed: 13
