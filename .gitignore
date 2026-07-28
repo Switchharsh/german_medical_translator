@@ -25,3 +25,5 @@ huggingface/
 # Editor/OS cruft
 .DS_Store
 .vscode/
+.venv/
+

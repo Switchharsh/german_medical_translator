@@ -100,33 +100,45 @@ class HyMT2Translator(Translator):
             for text in batch:
                 prompt = build_hymt2_prompt(text, tgt_lang)
                 messages = [{"role": "user", "content": prompt}]
+                # return_dict=True is required so this always returns a
+                # BatchEncoding with an explicit input_ids tensor — some
+                # transformers versions return a plain tensor from
+                # return_tensors="pt" alone and some return a dict, and
+                # calling model.generate(result, ...) positionally on a dict
+                # crashes deep inside generate() with an opaque
+                # AttributeError on `.shape`. Being explicit here avoids
+                # depending on that version-specific default.
                 try:
-                    input_ids = self._tokenizer.apply_chat_template(
+                    encoded = self._tokenizer.apply_chat_template(
                         messages,
                         add_generation_prompt=True,
                         return_tensors="pt",
+                        return_dict=True,
                         enable_thinking=False,
-                    ).to(self._device)
+                    )
                 except TypeError:
                     # Hy-MT2's own template doesn't document a "thinking" mode
                     # (unlike Qwen3.5, which does), but trust_remote_code=True
                     # means its exact template is out of our control — try the
                     # flag defensively, fall back if unsupported.
-                    input_ids = self._tokenizer.apply_chat_template(
+                    encoded = self._tokenizer.apply_chat_template(
                         messages,
                         add_generation_prompt=True,
                         return_tensors="pt",
-                    ).to(self._device)
+                        return_dict=True,
+                    )
+                encoded = {key: value.to(self._device) for key, value in encoded.items()}
+                input_length = encoded["input_ids"].shape[-1]
                 with self._torch.inference_mode():
                     output = self._model.generate(
-                        input_ids,
+                        **encoded,
                         max_new_tokens=self._config.max_new_tokens,
                         do_sample=False,
                         num_beams=self._config.num_beams,
                         repetition_penalty=1.05,
                     )
                 decoded = self._tokenizer.decode(
-                    output[0][input_ids.shape[-1] :],
+                    output[0][input_length:],
                     skip_special_tokens=True,
                 )
                 batch_outputs.append(strip_thinking(decoded))

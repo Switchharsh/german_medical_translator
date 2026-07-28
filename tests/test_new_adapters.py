@@ -45,6 +45,70 @@ def test_hymt2_config_passthrough() -> None:
     assert gc["num_beams"] == 1
 
 
+class _FakeTorch:
+    """Just enough of the torch API surface for translate() to run."""
+
+    class inference_mode:
+        def __enter__(self):
+            return None
+
+        def __exit__(self, *args):
+            return False
+
+
+class _FakeBatchEncoding(dict):
+    """Mimics a real BatchEncoding: dict-like, plus a broken .shape attr access
+    (this is exactly what caused the live AttributeError: calling .shape on
+    the dict itself, instead of on encoded["input_ids"], raises through
+    BatchEncoding.__getattr__)."""
+
+    def to(self, device):
+        return self
+
+
+class _FakeTensor:
+    def __init__(self, shape):
+        self.shape = shape
+
+    def to(self, device):
+        return self
+
+    def __getitem__(self, item):
+        return self
+
+
+class _FakeHyMT2Tokenizer:
+    def apply_chat_template(self, messages, add_generation_prompt, return_tensors,
+                             return_dict, enable_thinking=None):
+        assert return_dict is True, "must request return_dict=True to get a real BatchEncoding"
+        return _FakeBatchEncoding(input_ids=_FakeTensor((1, 7)))
+
+    def decode(self, ids, skip_special_tokens):
+        return "Kein Pleuraerguss."
+
+
+class _FakeHyMT2Model:
+    def generate(self, **kwargs):
+        assert "input_ids" in kwargs, "must unpack the encoding, not pass it positionally"
+        return [_FakeTensor((1, 10))]
+
+
+def test_hymt2_translate_unpacks_batch_encoding_correctly() -> None:
+    """Regression test: apply_chat_template(..., return_tensors='pt') can
+    return a BatchEncoding (dict-like) rather than a bare tensor depending on
+    the transformers/tokenizer version. Calling model.generate(encoding, ...)
+    positionally on that dict crashes inside generate() with an opaque
+    AttributeError on `.shape` — this was caught on a live GPU smoke test
+    against the real Hy-MT2-1.8B checkpoint, not by any prior unit test."""
+    t = HyMT2Translator(model_id="tencent/Hy-MT2-1.8B", config=GenerationConfig(batch_size=1, num_beams=1))
+    t._tokenizer = _FakeHyMT2Tokenizer()
+    t._model = _FakeHyMT2Model()
+    t._torch = _FakeTorch()
+    t._device = "cpu"
+    result = t.translate(["No pleural effusion."], "en", "de")
+    assert result == ["Kein Pleuraerguss."]
+
+
 # ---------------------------------------------------------------------------
 # TranslateGemma
 # ---------------------------------------------------------------------------
