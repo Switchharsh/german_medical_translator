@@ -86,9 +86,33 @@ class PromptedLLMTranslator(Translator):
         self._tokenizer = AutoTokenizer.from_pretrained(self.model_id, trust_remote_code=True)
         if self._tokenizer.pad_token is None:
             self._tokenizer.pad_token = self._tokenizer.eos_token
-        self._model = AutoModelForCausalLM.from_pretrained(self.model_id, trust_remote_code=True)
-        self._device = self._config.device or ("cuda" if torch.cuda.is_available() else "cpu")
-        self._model.to(self._device)
+        # Decoder-only models MUST be left-padded for batched generation. With
+        # the default right-padding, pad tokens sit between the prompt and the
+        # continuation for every sequence shorter than the longest in the
+        # batch, so the model generates from a position preceded by padding
+        # and the output is corrupted. transformers warns about this at
+        # generate() time ("right-padding was detected"); it is silent in the
+        # sense that generation still "succeeds" and produces degraded text
+        # rather than raising.
+        self._tokenizer.padding_side = "left"
+        # device_map="auto" shards across all visible GPUs when more than one
+        # is available (needed for large models, e.g. Qwen3.5-27B at ~54GB
+        # bf16, which does not fit a single 40GB A100). See HyMT2Translator
+        # for the same fix and why a plain --device cuda hint must not force
+        # single-GPU placement when multiple GPUs are actually visible.
+        multi_gpu = torch.cuda.is_available() and torch.cuda.device_count() > 1
+        use_auto_map = multi_gpu or self._config.device is None
+        self._model = AutoModelForCausalLM.from_pretrained(
+            self.model_id,
+            dtype=torch.bfloat16,
+            device_map="auto" if use_auto_map else None,
+            trust_remote_code=True,
+        )
+        if use_auto_map:
+            self._device = next(self._model.parameters()).device
+        else:
+            self._device = self._config.device or ("cuda" if torch.cuda.is_available() else "cpu")
+            self._model.to(self._device)
         self._model.eval()
 
     def _build_chat_prompt(self, text: str, src_lang: str, tgt_lang: str) -> str:

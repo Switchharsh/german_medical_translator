@@ -273,6 +273,16 @@ def command_convert_emea(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_convert_parrot(args: argparse.Namespace) -> int:
+    """Convert the German subset of PARROT radiology reports to normalized JSONL."""
+    from medmt_eval.data.parrot import parrot_rows
+
+    rows = parrot_rows(args.input, src_lang=args.src_lang, tgt_lang=args.tgt_lang)
+    write_jsonl(rows, args.output)
+    print(json.dumps({"output": args.output, "n_segments": len(rows)}))
+    return 0
+
+
 def _add_data_args(parser: argparse.ArgumentParser, *, allow_reverse: bool = True) -> None:
     parser.add_argument("--input", required=True, help="JSONL, CSV, TSV, or Parquet input")
     parser.add_argument("--src-lang", help="Default source language when input omits it (en/de)")
@@ -397,6 +407,20 @@ def build_parser() -> argparse.ArgumentParser:
     )
     emea.add_argument("--seed", type=int, default=13, help="RNG seed for deterministic sampling")
     emea.set_defaults(handler=command_convert_emea)
+
+    parrot = convert_sub.add_parser(
+        "parrot",
+        help="Convert the German subset of PARROT radiology reports to JSONL",
+    )
+    parrot.add_argument("--input", required=True, help="Path to PARROT_v1_0.jsonl")
+    parrot.add_argument("--output", required=True, help="Output JSONL path")
+    parrot.add_argument(
+        "--src-lang", default="de",
+        help="de = German report as source, English translation as reference (default); "
+             "en inverts the pair",
+    )
+    parrot.add_argument("--tgt-lang", default="en")
+    parrot.set_defaults(handler=command_convert_parrot)
 
     return parser
 

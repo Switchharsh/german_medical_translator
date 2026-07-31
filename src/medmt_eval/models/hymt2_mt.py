@@ -79,13 +79,21 @@ class HyMT2Translator(Translator):
         self._tokenizer = AutoTokenizer.from_pretrained(
             self.model_id, trust_remote_code=True
         )
+        # device_map="auto" shards the model across ALL visible GPUs when more
+        # than one is available (needed for models too big for a single 40GB
+        # A100, e.g. Hy-MT2-30B-A3B at ~60GB bf16). Treating --device cuda as
+        # "pin to one GPU" (the previous behavior) silently defeated
+        # multi-GPU SLURM allocations and caused an OOM that a correct
+        # device_map would have avoided by spreading layers over both GPUs.
+        multi_gpu = torch.cuda.is_available() and torch.cuda.device_count() > 1
+        use_auto_map = multi_gpu or self._config.device is None
         self._model = AutoModelForCausalLM.from_pretrained(
             self.model_id,
             dtype=torch.bfloat16,
-            device_map="auto" if self._config.device is None else None,
+            device_map="auto" if use_auto_map else None,
             trust_remote_code=True,
         )
-        if self._config.device:
+        if not use_auto_map and self._config.device:
             self._model.to(self._config.device)
         self._device = next(self._model.parameters()).device
         self._model.eval()

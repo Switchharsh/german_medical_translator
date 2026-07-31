@@ -26,7 +26,7 @@
 #SBATCH --error=logs/medmt-benchmark-%j.err
 set -euo pipefail
 
-source "$(dirname "$0")/_bench_common.sh"
+source "/home/atuin/b180dc/b180dc50/german_medical_translator/scripts/_bench_common.sh"
 
 MODELS="identity opus nllb hymt2 translategemma"
 declare -A BATCH_SIZE=( [identity]=64 [opus]=64 [nllb]=16 [hymt2]=16 [translategemma]=8 )

@@ -11,8 +11,8 @@
 # Resume: RESUME_DIR=results/full_XXXX sbatch scripts/benchmark_hymt2_1.8b.slurm
 #
 set -euo pipefail
-
-source "$(dirname "$0")/_bench_common.sh"
+export HF_HOME="$WORK/.cache/huggingface"
+source "/home/atuin/b180dc/b180dc50/german_medical_translator/scripts/_bench_common.sh"
 
 MODELS="hymt2-1.8b"
 declare -A MODEL_IDS=( [hymt2-1.8b]="tencent/Hy-MT2-1.8B" )

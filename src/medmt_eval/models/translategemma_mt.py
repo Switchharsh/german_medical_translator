@@ -66,12 +66,17 @@ class TranslateGemmaTranslator(Translator):
         torch, AutoProcessor, AutoModelForImageTextToText = _imports()
         self._torch = torch
         self._processor = AutoProcessor.from_pretrained(self.model_id)
+        # See HyMT2Translator._load for why multi-GPU visibility overrides a
+        # plain --device cuda hint: TranslateGemma-27B (~54GB bf16) does not
+        # fit a single 40GB A100 and needs device_map="auto" sharding.
+        multi_gpu = torch.cuda.is_available() and torch.cuda.device_count() > 1
+        use_auto_map = multi_gpu or self._config.device is None
         self._model = AutoModelForImageTextToText.from_pretrained(
             self.model_id,
             dtype=torch.bfloat16,
-            device_map="auto" if self._config.device is None else None,
+            device_map="auto" if use_auto_map else None,
         )
-        if self._config.device:
+        if not use_auto_map and self._config.device:
             self._model.to(self._config.device)
         self._device = next(self._model.parameters()).device
         self._model.eval()

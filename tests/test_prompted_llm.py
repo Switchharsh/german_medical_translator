@@ -99,3 +99,70 @@ def test_strip_thinking_is_noop_without_think_tags() -> None:
 def test_strip_thinking_handles_multiline_block() -> None:
     raw = "<think>\nline one\nline two\n</think>\nDer Patient verneint Brustschmerzen."
     assert strip_thinking(raw) == "Der Patient verneint Brustschmerzen."
+
+
+class _RecordingTokenizer:
+    """Stands in for a real tokenizer so _load()'s side effects are visible."""
+
+    def __init__(self) -> None:
+        self.pad_token = "<pad>"
+        self.eos_token = "<eos>"
+        self.padding_side = "right"  # transformers' default — must be overridden
+
+
+class _StubModel:
+    def to(self, device):
+        return self
+
+    def eval(self):
+        return self
+
+    def parameters(self):
+        raise AssertionError("parameters() should not be reached in this test")
+
+
+def test_load_sets_left_padding_for_decoder_only_batching(monkeypatch) -> None:
+    """Regression test: decoder-only models must be left-padded for batched
+    generation. With right-padding, pad tokens land between the prompt and the
+    continuation for every sequence shorter than the longest in its batch,
+    silently corrupting output (transformers only warns, it does not raise).
+    Observed live as a repeated "right-padding was detected" warning during
+    the qwen35-27b benchmark run.
+
+    This drives the real _load() via a patched _imports() so the padding_side
+    assignment in the production code path is what's asserted."""
+    import medmt_eval.models.llm_mt as llm_mt
+
+    tok = _RecordingTokenizer()
+
+    class _FakeTokenizerCls:
+        @staticmethod
+        def from_pretrained(*args, **kwargs):
+            return tok
+
+    class _FakeModelCls:
+        @staticmethod
+        def from_pretrained(*args, **kwargs):
+            return _StubModel()
+
+    class _FakeCuda:
+        @staticmethod
+        def is_available():
+            return False
+
+        @staticmethod
+        def device_count():
+            return 0
+
+    class _FakeTorchMod:
+        bfloat16 = "bf16"
+        cuda = _FakeCuda
+
+    monkeypatch.setattr(
+        llm_mt, "_imports", lambda: (_FakeTorchMod, _FakeTokenizerCls, _FakeModelCls)
+    )
+
+    translator = PromptedLLMTranslator(model_id="test/model", config=GenerationConfig(device="cpu"))
+    translator._load()
+
+    assert tok.padding_side == "left", "decoder-only batching requires left padding"

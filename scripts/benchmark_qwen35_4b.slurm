@@ -16,8 +16,8 @@
 # Resume: RESUME_DIR=results/full_XXXX sbatch scripts/benchmark_qwen35_4b.slurm
 #
 set -euo pipefail
-
-source "$(dirname "$0")/_bench_common.sh"
+export HF_HOME="$WORK/.cache/huggingface"
+source "/home/atuin/b180dc/b180dc50/german_medical_translator/scripts/_bench_common.sh"
 
 MODELS="qwen35-4b"
 declare -A MODEL_IDS=( [qwen35-4b]="Qwen/Qwen3.5-4B" )

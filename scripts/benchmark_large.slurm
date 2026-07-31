@@ -14,8 +14,8 @@
 # Hy-MT2-7B needs ~14GB bf16, also fits here with generous batch sizes.
 #
 set -euo pipefail
-
-source "$(dirname "$0")/_bench_common.sh"
+export HF_HOME="$WORK/.cache/huggingface"
+source "/home/atuin/b180dc/b180dc50/german_medical_translator/scripts/_bench_common.sh"
 
 MODELS="hymt2-7b translategemma-27b"
 declare -A BATCH_SIZE=( [hymt2-7b]=4 [translategemma-27b]=2 )
