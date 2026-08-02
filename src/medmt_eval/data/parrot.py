@@ -36,6 +36,15 @@ from medmt_eval.schema import Segment
 
 # Values of the `language` field that denote German.
 _GERMAN_ALIASES = {"german", "deutsch", "de"}
+_TURKISH_ALIASES = {"turkish", "türkçe", "turkce", "tr"}
+
+# PARROT's `language` field holds English language names ("German", "Turkish").
+# Values here are matched case-insensitively against it. Filtering must key on
+# `language` and never on `country`, which is dirty (see module docstring).
+_LANGUAGE_SUBSETS = {
+    "de": _GERMAN_ALIASES,
+    "tr": _TURKISH_ALIASES,
+}
 
 _WHITESPACE = re.compile(r"\s+")
 
@@ -103,26 +112,41 @@ def parrot_segments(
     tgt_lang: str = "en",
     language_aliases: set[str] | None = None,
 ) -> list[Segment]:
-    """Build Segments from PARROT.
+    """Build Segments from PARROT for a ``<report language>``/``en`` pair.
 
     With ``src_lang="de"`` the original German report is the source and the
-    contributor's English translation is the reference.  With ``src_lang="en"``
-    the pair is inverted (English translation as source, original German report
-    as reference) — defensible, but note the human translator worked in the
-    opposite direction, so translationese runs backwards relative to a corpus
-    authored natively in English.
+    contributor's English translation is the reference.  Inverting the pair
+    (``src_lang="en"``) is defensible, but note the human translator worked in
+    the opposite direction, so translationese runs backwards relative to a
+    corpus authored natively in English.
+
+    ``src_lang="tr"`` selects the Turkish subset. Note that the clinical
+    detectors have lexicons for EN and DE only, so a TR->EN run scores with
+    reduced coverage — see ``ClinicalSafetyEvaluator.detector_coverage``.
     """
-    if {src_lang, tgt_lang} != {"de", "en"}:
-        raise ValueError("PARROT conversion supports the de/en pair only.")
+    pair = {src_lang, tgt_lang}
+    if "en" not in pair or len(pair) != 2:
+        raise ValueError(
+            f"PARROT conversion pairs a report language with English; got {sorted(pair)}."
+        )
+    report_lang = next(lang for lang in pair if lang != "en")
+    if language_aliases is None:
+        language_aliases = _LANGUAGE_SUBSETS.get(report_lang)
+        if language_aliases is None:
+            raise ValueError(
+                f"No PARROT language filter defined for {report_lang!r}; "
+                f"known: {', '.join(sorted(_LANGUAGE_SUBSETS))}."
+            )
 
     records = load_parrot_records(path, language_aliases=language_aliases)
     segments: list[Segment] = []
     for row in records:
         report = str(row.get("report") or "").strip()
         translation = str(row.get("translation") or "").strip()
-        german_first = src_lang == "de"
-        source_text = report if german_first else translation
-        reference_text = translation if german_first else report
+        # The original-language report is the source unless the pair is inverted.
+        report_is_source = src_lang != "en"
+        source_text = report if report_is_source else translation
+        reference_text = translation if report_is_source else report
 
         modality = str(row.get("modality") or "unspecified").strip() or "unspecified"
         area = normalise_area(row.get("area"))

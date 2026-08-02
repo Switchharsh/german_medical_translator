@@ -291,7 +291,7 @@ def _add_data_args(parser: argparse.ArgumentParser, *, allow_reverse: bool = Tru
         parser.add_argument("--reverse", action="store_true", help="Reverse source/reference for DE↔EN evaluation")
 
 
-_MODEL_CHOICES = ["identity", "opus", "nllb", "madlad", "tower", "deepl", "prompted-llm", "hymt2", "translategemma"]
+_MODEL_CHOICES = ["identity", "opus", "nllb", "madlad", "tower", "deepl", "prompted-llm", "hymt2", "translategemma", "openai-compat"]
 
 
 def _add_model_args(parser: argparse.ArgumentParser) -> None:
@@ -416,8 +416,8 @@ def build_parser() -> argparse.ArgumentParser:
     parrot.add_argument("--output", required=True, help="Output JSONL path")
     parrot.add_argument(
         "--src-lang", default="de",
-        help="de = German report as source, English translation as reference (default); "
-             "en inverts the pair",
+        help="Report language as source: de (default) or tr. Use en to invert the "
+             "pair (English translation as source, original report as reference).",
     )
     parrot.add_argument("--tgt-lang", default="en")
     parrot.set_defaults(handler=command_convert_parrot)

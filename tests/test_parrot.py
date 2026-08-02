@@ -85,10 +85,31 @@ def test_segments_can_be_inverted_to_en_de(tmp_path) -> None:
     assert segment.ref_text == "Kein Pleuraerguss."
 
 
-def test_rejects_unsupported_language_pair(tmp_path) -> None:
+def test_rejects_pair_without_english(tmp_path) -> None:
+    """Every PARROT pair is <report language> <-> English; de/fr is not one."""
     path = _write(tmp_path, [_record(1)])
-    with pytest.raises(ValueError, match="de/en"):
+    with pytest.raises(ValueError, match="pairs a report language with English"):
         parrot_segments(path, src_lang="de", tgt_lang="fr")
+
+
+def test_rejects_language_without_a_defined_subset(tmp_path) -> None:
+    """A pair may be well-formed yet have no filter defined for the report
+    language, e.g. Polish — PARROT has 837 Polish records but no subset entry."""
+    path = _write(tmp_path, [_record(1)])
+    with pytest.raises(ValueError, match="No PARROT language filter"):
+        parrot_segments(path, src_lang="pl", tgt_lang="en")
+
+
+def test_turkish_subset_selects_turkish_records(tmp_path) -> None:
+    rows = [
+        _record(1, language="German", report="Kein Erguss.", translation="No effusion."),
+        _record(2, language="Turkish", report="Efüzyon yok.", translation="No effusion."),
+    ]
+    segments = parrot_segments(_write(tmp_path, rows), src_lang="tr", tgt_lang="en")
+    assert [s.id for s in segments] == ["parrot-2"]
+    assert segments[0].src_lang == "tr" and segments[0].tgt_lang == "en"
+    assert segments[0].src_text == "Efüzyon yok."
+    assert segments[0].ref_text == "No effusion."
 
 
 def test_raises_when_no_usable_records(tmp_path) -> None:

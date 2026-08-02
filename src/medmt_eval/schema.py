@@ -15,15 +15,33 @@ _LANGUAGE_ALIASES = {
     "ger": "de",
     "german": "de",
     "deutsch": "de",
+    "tr": "tr",
+    "tur": "tr",
+    "turkish": "tr",
+    "türkçe": "tr",
+    "turkce": "tr",
 }
+
+# Languages with hand-written clinical detectors (negation cues, laterality
+# lexicon). Text in any other supported language still flows through the
+# pipeline — surface metrics and the language-agnostic number checks apply —
+# but the cue-based detectors cannot inspect it. See
+# taxonomy.clinical for how that degradation is handled.
+DETECTOR_LANGUAGES = frozenset({"en", "de"})
 
 
 def normalise_language(value: str) -> str:
     """Return the pipeline's two-letter language code or raise a useful error."""
     code = _LANGUAGE_ALIASES.get(value.strip().lower())
     if code is None:
-        raise ValueError(f"Unsupported language {value!r}; this MVP supports EN and DE.")
+        supported = ", ".join(sorted(set(_LANGUAGE_ALIASES.values())).__iter__())
+        raise ValueError(f"Unsupported language {value!r}; supported codes are {supported}.")
     return code
+
+
+def has_detector_support(lang: str) -> bool:
+    """Is `lang` covered by the cue-based clinical detectors?"""
+    return normalise_language(lang) in DETECTOR_LANGUAGES
 
 
 @dataclass(frozen=True)

@@ -119,16 +119,54 @@ class TerminologyBank:
                 if row.get("en") and row.get("de")
             )
 
+    # Columns the starter term bank actually provides. A source language outside
+    # this set cannot be searched for concept mentions.
+    _BANK_LANGUAGES = frozenset({"en", "de"})
+
     def expected_terms(self, source_text: str, src_lang: str, tgt_lang: str) -> list[TermPair]:
         source, target = normalise_language(src_lang), normalise_language(tgt_lang)
         if source == target:
             return []
+        # The bank has only en/de columns. Without an explicit guard the lookup
+        # below would silently fall back to the German term for e.g. a Turkish
+        # source, searching Turkish text for German words — never matching, and
+        # never revealing why.
+        if source not in self._BANK_LANGUAGES or target not in self._BANK_LANGUAGES:
+            return []
         matched: list[TermPair] = []
         for pair in self.terms:
             source_term = pair.en if source == "en" else pair.de
-            if re.search(rf"(?<!\w){re.escape(source_term)}(?!\w)", source_text, re.IGNORECASE):
+            if re.search(term_surface_pattern(source_term), source_text, re.IGNORECASE):
                 matched.append(pair)
         return matched
+
+
+# Inflectional endings allowed on the final word of a term-bank entry. English
+# needs plurals ("lymph node" -> "lymph nodes"); German adds case/number endings
+# ("Lymphknoten" -> "Lymphknotens", "Erguss" -> "Ergusses"). Kept to a short
+# closed set so the match cannot drift onto an unrelated longer word.
+_TERM_SUFFIX = r"(?:e?[nsr]|es|en|s)?"
+
+
+def term_surface_pattern(term: str) -> str:
+    """Build a regex matching a term-bank entry allowing light inflection.
+
+    An exact-boundary match (``(?!\\w)``) rejects the inflected forms that appear
+    constantly in real reports: the plural "lymph nodes" does not match the bank
+    entry "lymph node", so a correct translation gets flagged as a terminology
+    failure. On PARROT that single effect produced 572 of 735 terminology
+    findings — 78 % of the category — all of them spurious.
+
+    Only the final word takes a suffix, so "pleural effusion" also matches
+    "pleural effusions" but never a different concept.
+    """
+    words = term.split()
+    if not words:
+        return r"(?!x)x"  # never matches
+    head = r"\s+".join(re.escape(word) for word in words[:-1])
+    tail = re.escape(words[-1]) + _TERM_SUFFIX
+    body = rf"{head}\s+{tail}" if head else tail
+    return rf"(?<!\w){body}(?!\w)"
 
 
 def _normalise_decimal(raw_value: str) -> Decimal:
@@ -176,7 +214,11 @@ def extract_numbers(text: str) -> list[NumberMention]:
 
 
 def _laterality(text: str, lang: str) -> set[str]:
-    found = {name for name, pattern in _LATERALITY_PATTERNS[lang].items() if pattern.search(text)}
+    """Laterality terms present in `text`, or an empty set for uncovered languages."""
+    patterns = _LATERALITY_PATTERNS.get(lang)
+    if patterns is None:
+        return set()
+    found = {name for name, pattern in patterns.items() if pattern.search(text)}
     if "bilateral" in found:
         found.update({"left", "right"})
         found.remove("bilateral")
@@ -189,6 +231,29 @@ class ClinicalSafetyEvaluator:
     def __init__(self, term_bank: TerminologyBank | None = None) -> None:
         self.term_bank = term_bank or TerminologyBank()
 
+    def detector_coverage(self, src_lang: str, tgt_lang: str) -> dict[str, bool]:
+        """Which detectors can actually run for this language pair.
+
+        Detectors that compare a cue on the source side against the target side
+        need a lexicon for BOTH languages. For a pair such as TR->EN only the
+        language-agnostic number check is fully active, so a critical-error rate
+        computed for that pair is not comparable to one from a fully covered
+        pair like DE->EN. Callers should record this alongside the results.
+        """
+        source, target = normalise_language(src_lang), normalise_language(tgt_lang)
+        both_negation = source in _NEGATION_PATTERNS and target in _NEGATION_PATTERNS
+        both_laterality = source in _LATERALITY_PATTERNS and target in _LATERALITY_PATTERNS
+        both_bank = (
+            source in TerminologyBank._BANK_LANGUAGES
+            and target in TerminologyBank._BANK_LANGUAGES
+        )
+        return {
+            "negation": both_negation,
+            "laterality": both_laterality,
+            "number_or_measurement": True,  # language-agnostic
+            "terminology": both_bank,
+        }
+
     def evaluate(self, source_text: str, hypothesis: str, src_lang: str, tgt_lang: str) -> list[ClinicalFinding]:
         source, target = normalise_language(src_lang), normalise_language(tgt_lang)
         findings: list[ClinicalFinding] = []
@@ -200,6 +265,13 @@ class ClinicalSafetyEvaluator:
 
     @staticmethod
     def _negation(source_text: str, hypothesis: str, src_lang: str, tgt_lang: str) -> list[ClinicalFinding]:
+        # Cue lists exist only for the languages in DETECTOR_LANGUAGES. Comparing
+        # cue presence across a covered and an uncovered side would be worse than
+        # useless: an uncovered side always yields zero cues, so every negated
+        # source would be reported as "negation dropped". Skip instead, and let
+        # the caller record reduced coverage.
+        if src_lang not in _NEGATION_PATTERNS or tgt_lang not in _NEGATION_PATTERNS:
+            return []
         source_cues = [match.group(0) for match in _NEGATION_PATTERNS[src_lang].finditer(source_text)]
         target_cues = [match.group(0) for match in _NEGATION_PATTERNS[tgt_lang].finditer(hypothesis)]
         if bool(source_cues) == bool(target_cues):
@@ -219,6 +291,13 @@ class ClinicalSafetyEvaluator:
 
     @staticmethod
     def _laterality(source_text: str, hypothesis: str, src_lang: str, tgt_lang: str) -> list[ClinicalFinding]:
+        # This detector diffs source laterality against target laterality, so it
+        # is only meaningful when BOTH sides have a lexicon. With an uncovered
+        # source, `expected` would always be empty and every laterality mention
+        # in the translation would be reported as "added" — fabricated findings
+        # rather than missing ones.
+        if src_lang not in _LATERALITY_PATTERNS or tgt_lang not in _LATERALITY_PATTERNS:
+            return []
         expected, observed = _laterality(source_text, src_lang), _laterality(hypothesis, tgt_lang)
         if not expected and not observed:
             return []
@@ -279,7 +358,7 @@ class ClinicalSafetyEvaluator:
         findings: list[ClinicalFinding] = []
         for pair in self.term_bank.expected_terms(source_text, src_lang, tgt_lang):
             expected = pair.de if tgt_lang == "de" else pair.en
-            if not re.search(rf"(?<!\w){re.escape(expected)}(?!\w)", hypothesis, re.IGNORECASE):
+            if not re.search(term_surface_pattern(expected), hypothesis, re.IGNORECASE):
                 source_term = pair.en if src_lang == "en" else pair.de
                 findings.append(
                     ClinicalFinding(

@@ -27,6 +27,11 @@ def _translategemma_cls():
     return TranslateGemmaTranslator
 
 
+def _openai_compat_cls():
+    from medmt_eval.models.openai_compat_mt import OpenAICompatTranslator
+    return OpenAICompatTranslator
+
+
 def create_translator(
     name: str,
     *,
@@ -61,6 +66,11 @@ def create_translator(
         ),
         "hymt2": lambda: _hymt2_cls()(model_id=model_id, config=config),
         "translategemma": lambda: _translategemma_cls()(model_id=model_id, config=config),
+        # Any OpenAI-compatible /v1/chat/completions endpoint. Pass --model-id
+        # to choose the served model (e.g. glm-5.2).
+        "openai-compat": lambda: _openai_compat_cls()(
+            model_id=model_id, api_key=api_key, config=config
+        ),
     }
     key = name.lower()
     if key not in adapters:
