@@ -131,3 +131,67 @@ def test_translategemma_config_passthrough() -> None:
     t = TranslateGemmaTranslator(config=config)
     gc = t.generation_config
     assert gc["max_new_tokens"] == 1024
+
+
+# ---------------------------------------------------------------------------
+# Turkish language support in model adapters
+# ---------------------------------------------------------------------------
+
+def test_language_name_covers_turkish() -> None:
+    """Three separate copies of an en/de-only name map used to exist, one per
+    adapter. Adding Turkish to some but not others produced KeyError crashes
+    mid-run (SLURM jobs 3941775/3941776)."""
+    from medmt_eval.schema import language_name
+
+    assert language_name("tr") == "Turkish"
+    assert language_name("turkish") == "Turkish"
+    assert language_name("de") == "German"
+    assert language_name("en") == "English"
+
+
+def test_opus_maps_turkish_directions() -> None:
+    from medmt_eval.models.transformers_mt import OpusMTTranslator
+
+    assert OpusMTTranslator._MODELS[("tr", "en")] == "Helsinki-NLP/opus-mt-tr-en"
+    assert OpusMTTranslator._MODELS[("en", "tr")] == "Helsinki-NLP/opus-mt-en-tr"
+
+
+def test_opus_selects_checkpoint_for_non_default_direction() -> None:
+    """The selection used to be gated on `direction != ("en","de")`, a hidden
+    coupling to the default checkpoint. It must key off default_model_id so it
+    stays correct as more directions are added."""
+    from medmt_eval.models.transformers_mt import OpusMTTranslator
+
+    t = OpusMTTranslator()
+    assert t.model_id == t.default_model_id
+    try:
+        t.translate([], "tr", "en")   # no model load: empty input short-circuits
+    except Exception:
+        pass
+    assert t.model_id == "Helsinki-NLP/opus-mt-tr-en"
+
+
+def test_opus_rejects_unmapped_direction() -> None:
+    from medmt_eval.models.transformers_mt import OpusMTTranslator
+
+    import pytest as _pytest
+    with _pytest.raises(ValueError, match="no checkpoint"):
+        OpusMTTranslator().translate(["x"], "de", "tr")
+
+
+def test_nllb_has_turkish_code() -> None:
+    from medmt_eval.models.transformers_mt import NLLBTranslator
+
+    assert NLLBTranslator._NLLB_CODES["tr"] == "tur_Latn"
+
+
+def test_prompt_builders_accept_turkish() -> None:
+    """Each adapter builds its prompt from the shared name map; all must work."""
+    from medmt_eval.models.llm_mt import build_prompt
+    from medmt_eval.models.hymt2_mt import build_hymt2_prompt
+    from medmt_eval.models.openai_compat_mt import build_batch_prompt
+
+    assert "Turkish" in build_prompt("Efüzyon yok.", "tr", "en")
+    assert "English" in build_prompt("Efüzyon yok.", "tr", "en")
+    assert "English" in build_hymt2_prompt("Efüzyon yok.", "en")
+    assert "Turkish" in build_batch_prompt(["a", "b"], "tr", "en")

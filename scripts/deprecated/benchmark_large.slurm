@@ -15,7 +15,7 @@
 #
 set -euo pipefail
 export HF_HOME="$WORK/.cache/huggingface"
-source "/home/atuin/b180dc/b180dc50/german_medical_translator/scripts/_bench_common.sh"
+source "/home/atuin/b180dc/b180dc50/german_medical_translator/scripts/lib/bench_common.sh"
 
 MODELS="hymt2-7b translategemma-27b"
 declare -A BATCH_SIZE=( [hymt2-7b]=4 [translategemma-27b]=2 )

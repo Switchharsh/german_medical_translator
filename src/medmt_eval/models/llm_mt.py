@@ -24,9 +24,7 @@ from __future__ import annotations
 from typing import Any
 
 from medmt_eval.models.base import GenerationConfig, Translator, strip_thinking
-from medmt_eval.schema import normalise_language
-
-_LANGUAGE_NAMES = {"en": "English", "de": "German"}
+from medmt_eval.schema import language_name, normalise_language
 
 _DEFAULT_TEMPLATE = (
     "Translate the following medical text from {source_lang} to {target_lang}. "
@@ -52,8 +50,8 @@ def build_prompt(
     template: str = _DEFAULT_TEMPLATE,
 ) -> str:
     """Construct a translation prompt without loading a model (pure function, easily testable)."""
-    source_name = _LANGUAGE_NAMES[normalise_language(src_lang)]
-    target_name = _LANGUAGE_NAMES[normalise_language(tgt_lang)]
+    source_name = language_name(src_lang)
+    target_name = language_name(tgt_lang)
     return template.format(source_lang=source_name, target_lang=target_name, text=text)
 
 

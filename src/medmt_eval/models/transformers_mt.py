@@ -82,9 +82,14 @@ class OpusMTTranslator(_TransformersTranslator):
 
     name = "opus"
     default_model_id = "Helsinki-NLP/opus-mt-en-de"
+    # Helsinki-NLP ships one checkpoint per direction, so each pair needs an
+    # explicit entry; an unmapped direction raises rather than silently using
+    # the wrong model.
     _MODELS = {
         ("en", "de"): "Helsinki-NLP/opus-mt-en-de",
         ("de", "en"): "Helsinki-NLP/opus-mt-de-en",
+        ("en", "tr"): "Helsinki-NLP/opus-mt-en-tr",
+        ("tr", "en"): "Helsinki-NLP/opus-mt-tr-en",
     }
 
     def translate(self, texts: list[str], src_lang: str, tgt_lang: str) -> list[str]:
@@ -94,7 +99,10 @@ class OpusMTTranslator(_TransformersTranslator):
         expected = self._MODELS[direction]
         if self._model is not None and self.model_id != expected:
             raise ValueError("One Opus translator instance can only be used for one direction.")
-        if self.model_id == self.default_model_id and direction != ("en", "de"):
+        # Auto-select the checkpoint for this direction, unless the caller gave
+        # an explicit --model-id. Comparing against default_model_id (rather
+        # than a hardcoded direction) keeps this correct as _MODELS grows.
+        if self.model_id == self.default_model_id:
             self.model_id = expected
         return self._generate(texts)
 
@@ -104,7 +112,7 @@ class NLLBTranslator(_TransformersTranslator):
 
     name = "nllb"
     default_model_id = "facebook/nllb-200-distilled-1.3B"
-    _NLLB_CODES = {"en": "eng_Latn", "de": "deu_Latn"}
+    _NLLB_CODES = {"en": "eng_Latn", "de": "deu_Latn", "tr": "tur_Latn"}
 
     def translate(self, texts: list[str], src_lang: str, tgt_lang: str) -> list[str]:
         source, target = normalise_language(src_lang), normalise_language(tgt_lang)

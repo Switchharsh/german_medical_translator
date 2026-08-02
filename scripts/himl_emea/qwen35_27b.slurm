@@ -18,7 +18,7 @@
 #
 set -euo pipefail
 export HF_HOME="$WORK/.cache/huggingface"
-source "/home/atuin/b180dc/b180dc50/german_medical_translator/scripts/_bench_common.sh"
+source "/home/atuin/b180dc/b180dc50/german_medical_translator/scripts/lib/bench_common.sh"
 
 MODELS="qwen35-27b"
 declare -A MODEL_IDS=( [qwen35-27b]="Qwen/Qwen3.5-27B" )

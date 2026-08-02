@@ -22,9 +22,7 @@ from __future__ import annotations
 from typing import Any
 
 from medmt_eval.models.base import GenerationConfig, Translator, strip_thinking
-from medmt_eval.schema import normalise_language
-
-_LANGUAGE_NAMES = {"en": "English", "de": "German"}
+from medmt_eval.schema import language_name
 
 _DEFAULT_MODEL_ID = "tencent/Hy-MT2-1.8B"
 
@@ -48,7 +46,7 @@ def _imports() -> tuple[Any, Any, Any]:
 
 def build_hymt2_prompt(text: str, tgt_lang: str) -> str:
     """Build the raw user-message content for Hy-MT2."""
-    target_name = _LANGUAGE_NAMES[normalise_language(tgt_lang)]
+    target_name = language_name(tgt_lang)
     return _PROMPT_TEMPLATE.format(target_lang=target_name, text=text)
 
 

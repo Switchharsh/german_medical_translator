@@ -12,7 +12,7 @@
 #
 set -euo pipefail
 export HF_HOME="$WORK/.cache/huggingface"
-source "/home/atuin/b180dc/b180dc50/german_medical_translator/scripts/_bench_common.sh"
+source "/home/atuin/b180dc/b180dc50/german_medical_translator/scripts/lib/bench_common.sh"
 
 MODELS="hymt2-7b"
 declare -A MODEL_IDS=( [hymt2-7b]="tencent/Hy-MT2-7B" )

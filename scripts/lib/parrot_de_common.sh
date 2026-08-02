@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Shared PARROT setup. Source this AFTER _bench_common.sh, not instead of it.
+# Shared PARROT setup. Source this AFTER lib/bench_common.sh, not instead of it.
 #
-# _bench_common.sh hardcodes DATASETS to the HimL/EMEA set and prepares those
+# lib/bench_common.sh hardcodes DATASETS to the HimL/EMEA set and prepares those
 # corpora. This file converts the PARROT German subset (if not already done)
 # and then overrides DATASETS so run_models/run_models_with_ids operate on
 # PARROT instead. Sourcing order matters — override must come after.
@@ -30,7 +30,7 @@ mkdir -p data/derived
 
 echo "=== PARROT dataset: $(wc -l < "$PARROT_JSONL") segments ==="
 
-# Override the HimL/EMEA default from _bench_common.sh.
+# Override the HimL/EMEA default from lib/bench_common.sh.
 DATASETS="$PARROT_JSONL"
 
 echo "=== PARROT results -> $RUN_DIR ==="

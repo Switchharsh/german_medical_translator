@@ -43,12 +43,10 @@ from typing import Any
 import requests as _requests
 
 from medmt_eval.models.base import GenerationConfig, Translator, strip_thinking
-from medmt_eval.schema import normalise_language
+from medmt_eval.schema import language_name, normalise_language
 
 _DEFAULT_BASE_URL = "https://api.hcnsec.cn/v1/chat/completions"
 _DEFAULT_MODEL = "glm-5.2"
-
-_LANGUAGE_NAMES = {"en": "English", "de": "German"}
 
 # Generous: this endpoint has been observed taking ~3 minutes per request.
 _DEFAULT_TIMEOUT = 900
@@ -86,8 +84,8 @@ def _get_api_key() -> str:
 
 def build_batch_prompt(texts: list[str], src_lang: str, tgt_lang: str) -> str:
     """Render a numbered multi-item translation prompt (pure function, testable)."""
-    source_name = _LANGUAGE_NAMES[normalise_language(src_lang)]
-    target_name = _LANGUAGE_NAMES[normalise_language(tgt_lang)]
+    source_name = language_name(src_lang)
+    target_name = language_name(tgt_lang)
     header = _BATCH_HEADER.format(n=len(texts), source_lang=source_name, target_lang=target_name)
     body = "\n\n".join(f"[[{index + 1}]]\n{text}" for index, text in enumerate(texts))
     return header + body
@@ -225,8 +223,8 @@ class OpenAICompatTranslator(Translator):
             )
 
     def _translate_one(self, text: str, src_lang: str, tgt_lang: str) -> str:
-        source_name = _LANGUAGE_NAMES[normalise_language(src_lang)]
-        target_name = _LANGUAGE_NAMES[normalise_language(tgt_lang)]
+        source_name = language_name(src_lang)
+        target_name = language_name(tgt_lang)
         prompt = _SINGLE_TEMPLATE.format(
             source_lang=source_name, target_lang=target_name, text=text
         )

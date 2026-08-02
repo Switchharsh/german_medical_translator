@@ -15,14 +15,14 @@
 set -euo pipefail
 export HF_HOME="${HF_HOME:-$WORK/.cache/huggingface}"
 
-# Give PARROT its own results namespace BEFORE _bench_common.sh runs, so the
+# Give PARROT its own results namespace BEFORE lib/bench_common.sh runs, so the
 # GPU logger it launches writes into results/parrot_<jobid> rather than the
 # results/full_<jobid> namespace used by the HimL/EMEA runs. RESUME_DIR is
-# _bench_common.sh's existing hook for choosing RUN_DIR.
+# lib/bench_common.sh's existing hook for choosing RUN_DIR.
 export RESUME_DIR="${RESUME_DIR:-results/parrot_${SLURM_JOB_ID}}"
 
-source "/home/atuin/b180dc/b180dc50/german_medical_translator/scripts/_bench_common.sh"
-source "/home/atuin/b180dc/b180dc50/german_medical_translator/scripts/_parrot_common.sh"
+source "/home/atuin/b180dc/b180dc50/german_medical_translator/scripts/lib/bench_common.sh"
+source "/home/atuin/b180dc/b180dc50/german_medical_translator/scripts/lib/parrot_de_common.sh"
 
 MODELS="identity opus nllb"
 declare -A BATCH_SIZE=( [identity]=64 [opus]=16 [nllb]=8 )

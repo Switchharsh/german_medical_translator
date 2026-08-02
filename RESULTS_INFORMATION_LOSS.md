@@ -365,13 +365,13 @@ for three reasons:
 
 ```bash
 # consolidated results from all valid runs
-results/consolidated/combined.jsonl
-results/consolidated/leaderboard/leaderboard.csv
+results/himl_emea/consolidated/combined.jsonl
+results/himl_emea/consolidated/leaderboard/leaderboard.csv
 
 # regenerate the leaderboard
 medmt-eval leaderboard \
-  --input results/consolidated/combined.jsonl \
-  --output-dir results/consolidated/leaderboard
+  --input results/himl_emea/consolidated/combined.jsonl \
+  --output-dir results/himl_emea/consolidated/leaderboard
 ```
 
 **PARROT (§4):**
@@ -384,23 +384,23 @@ medmt-eval convert parrot \
   --output data/derived/parrot_de.jsonl --src-lang de --tgt-lang en
 
 # local models (HF_TOKEN must be exported — TranslateGemma repos are gated)
-sbatch scripts/benchmark_parrot_small.slurm    # identity, opus, nllb
-sbatch scripts/benchmark_parrot_medium.slurm   # hymt2-1.8b, translategemma-4b, qwen35-4b
-sbatch scripts/benchmark_parrot_7b.slurm       # hymt2-7b
-sbatch scripts/benchmark_parrot_large.slurm    # hymt2-30b-a3b, translategemma-27b, qwen35-27b
+sbatch scripts/parrot_de/small.slurm    # identity, opus, nllb
+sbatch scripts/parrot_de/medium.slurm   # hymt2-1.8b, translategemma-4b, qwen35-4b
+sbatch scripts/parrot_de/7b.slurm       # hymt2-7b
+sbatch scripts/parrot_de/large.slurm    # hymt2-30b-a3b, translategemma-27b, qwen35-27b
 
 # hosted models (OPENAI_COMPAT_API_KEY must be exported).
 # Only these three aliases are verified to route honestly — see the caveats above.
-API_MODEL=glm-5.2            sbatch scripts/benchmark_parrot_api.slurm
-API_MODEL=DeepSeek-V4-Flash  sbatch scripts/benchmark_parrot_api.slurm
-API_MODEL=MiniMax-M3         sbatch scripts/benchmark_parrot_api.slurm
+API_MODEL=glm-5.2            sbatch scripts/parrot_de/api.slurm
+API_MODEL=DeepSeek-V4-Flash  sbatch scripts/parrot_de/api.slurm
+API_MODEL=MiniMax-M3         sbatch scripts/parrot_de/api.slurm
 
 # confirm a compute node can reach the endpoint before a long run
-sbatch scripts/check_api_connectivity.slurm
+sbatch scripts/utils/check_api_connectivity.slurm
 
 # results
-results/parrot_consolidated/combined.jsonl
-results/parrot_consolidated/leaderboard/leaderboard.csv
+results/parrot_de/consolidated/combined.jsonl
+results/parrot_de/consolidated/leaderboard/leaderboard.csv
 ```
 
 Source jobs: 3933278 (small), 3933279 + 3935437 (medium, incl. the translategemma-4b

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Shared PARROT-Turkish setup. Source AFTER _bench_common.sh, which sets the
+# Shared PARROT-Turkish setup. Source AFTER lib/bench_common.sh, which sets the
 # HimL/EMEA defaults this file then overrides.
 #
 # 48 Turkish radiology reports, scored TR->EN (Turkish report as source, the

@@ -12,7 +12,7 @@
 #
 set -euo pipefail
 
-source "/home/atuin/b180dc/b180dc50/german_medical_translator/scripts/_bench_common.sh"
+source "/home/atuin/b180dc/b180dc50/german_medical_translator/scripts/lib/bench_common.sh"
 
 MODELS="translategemma-4b"
 declare -A MODEL_IDS=( [translategemma-4b]="google/translategemma-4b-it" )

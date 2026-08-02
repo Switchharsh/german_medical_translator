@@ -44,6 +44,26 @@ def has_detector_support(lang: str) -> bool:
     return normalise_language(lang) in DETECTOR_LANGUAGES
 
 
+# Full English names, used to build natural-language translation prompts.
+# Defined once here rather than per-adapter: three separate copies of this map
+# existed previously, and adding Turkish to some but not others produced
+# KeyError crashes mid-run (jobs 3941775/3941776).
+_LANGUAGE_NAMES = {
+    "en": "English",
+    "de": "German",
+    "tr": "Turkish",
+}
+
+
+def language_name(lang: str) -> str:
+    """Full English name of a language, for use in prompts."""
+    code = normalise_language(lang)
+    name = _LANGUAGE_NAMES.get(code)
+    if name is None:
+        raise ValueError(f"No prompt-facing name defined for language {code!r}.")
+    return name
+
+
 @dataclass(frozen=True)
 class Segment:
     """One aligned source/reference translation unit."""

@@ -7,7 +7,7 @@
 #SBATCH --error=logs/parrot-tr-api-%j.err
 #
 # PARROT Turkish radiology reports (48 segments, TR->EN) via a hosted
-# OpenAI-compatible endpoint. See scripts/_parrot_tr_common.sh for the reduced
+# OpenAI-compatible endpoint. See scripts/lib/parrot_tr_common.sh for the reduced
 # detector coverage and small-subset caveats.
 #
 # Only aliases verified to route honestly (2026-07-31):
