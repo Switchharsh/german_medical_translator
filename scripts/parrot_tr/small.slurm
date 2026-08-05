@@ -26,5 +26,12 @@ source "/home/atuin/b180dc/b180dc50/german_medical_translator/scripts/lib/parrot
 MODELS="identity opus nllb"
 declare -A BATCH_SIZE=( [identity]=64 [opus]=8 [nllb]=4 )
 declare -A NUM_BEAMS=(  [identity]=1  [opus]=4 [nllb]=4 )
+# Both models are encoder-limited: Opus max_position_embeddings=512,
+# NLLB=1024 (verified from the model configs). Turkish reports have a median
+# length of ~2,080 chars (~693 tokens), so Opus truncates on INPUT and NLLB is
+# marginal; chunk both on sentence boundaries and reassemble before scoring.
+declare -A CHUNK_MAX_TOKENS=( [opus]=400 [nllb]=400 )
+# See parrot_de/small.slurm: Opus's decoder position table is 512.
+declare -A MODEL_MAX_NEW_TOKENS=( [opus]=480 )
 
 run_models

@@ -21,6 +21,11 @@
 #    steeply with report length (5% under 250 chars, 70% over 2000), expect
 #    higher rates here for reasons unrelated to the language.
 
+# Turkish reports are ~3.5x longer than the German ones, so the default output
+# ceiling is raised further still. Runs 3941775-3941778 used the old 512-token
+# default and came back truncated; their numbers are invalid, not findings.
+if [ "${MAX_NEW_TOKENS_FROM_ENV:-0}" != "1" ]; then MAX_NEW_TOKENS=3072; fi
+
 PARROT_SRC="${PARROT_SRC:-PARROT_v1.0/data/PARROT_v1_0.jsonl}"
 PARROT_TR_JSONL="${PARROT_TR_JSONL:-data/derived/parrot_tr.jsonl}"
 

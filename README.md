@@ -9,8 +9,10 @@ reports **two layers side by side**:
 
 The point is to make the divergence visible: a fluent translation can score well
 on surface metrics and still invert a negation or drop a measurement. In this
-project's own results that divergence is real — on radiology reports the
-best-BLEU system ranks ninth of eleven on clinical safety.
+project's own results that divergence is real — on German radiology reports the
+best-BLEU system (`translategemma-27b`, BLEU 55.0) ranks seventh of ten on
+clinical errors, while the safest system (`opus`, 18.9 %) has the worst BLEU of
+any real translator.
 
 **Findings live in [`RESULTS_INFORMATION_LOSS.md`](RESULTS_INFORMATION_LOSS.md).**
 
@@ -29,7 +31,7 @@ scripts/               SLURM jobs, grouped by corpus — see scripts/README.md
 data/derived/          converted corpora (gitignored, regenerate with `convert`)
 datasets/              raw downloads (gitignored)
 results/               run outputs (gitignored)
-tests/                 102 tests, no GPU or network needed
+tests/                 117 tests, no GPU or network needed
 ```
 
 ## Install
@@ -42,6 +44,60 @@ pip install -e '.[mt,storage,plot,deepl,dev]'
 pytest -q
 ```
 
+## Current results — PARROT German radiology reports (DE→EN)
+
+296 reports, scored per document. `crit%` is the share of reports containing at
+least one critical clinical finding (negation flip, laterality error, or
+number/measurement mismatch). Lower is better; BLEU/chrF higher is better.
+
+| Model | Type | crit% | BLEU | chrF | TER |
+|---|---|---|---|---|---|
+| opus | local | **18.92 %** | 27.39 | 54.07 | 56.92 |
+| glm-5.2 | cloud | 19.26 % | 51.34 | 73.42 | 34.80 |
+| DeepSeek-V4-Flash | cloud | 19.93 % | 53.75 | 74.70 | 33.26 |
+| MiniMax-M3 | cloud | 21.28 % | 53.49 | 74.80 | 33.46 |
+| translategemma-4b | local | 21.96 % | 45.02 | 68.44 | 44.04 |
+| hymt2-7b | local | 22.97 % | 46.42 | 69.71 | 41.72 |
+| translategemma-27b | local | 23.65 % | **55.02** | **75.80** | 34.94 |
+| qwen35-4b | local | 24.66 % | 47.92 | 70.20 | 55.96 |
+| hymt2-1.8b | local | 25.34 % | 39.43 | 64.55 | 48.13 |
+| hymt2-30b-a3b | local | 30.74 % | 47.98 | 71.59 | 40.95 |
+| *identity (baseline)* | — | *95.95 %* | *3.25* | *25.63* | *94.25* |
+
+Two models are absent: `nllb` and `qwen35-27b` both returned output truncated on
+long documents (23/33 and 24/33 respectively) and are excluded until re-run. The
+cause was an *input* ceiling — see Limitations.
+
+`qwen35-4b` ran under that same input ceiling. Its output is complete on every
+document (0/33), because its translations are short enough not to expose the
+cut, but it should be re-run alongside the other two before the table is
+treated as final.
+
+**Surface quality and clinical safety do not agree.** `opus` has the lowest
+critical-error rate of any system while scoring worst on BLEU among real
+translators — its output is stilted but preserves numbers and negations.
+`translategemma-27b` is the reverse: best BLEU and chrF, yet seventh of ten on
+clinical errors. Ranking by BLEU alone would misorder the systems on the axis
+that matters clinically. This is the central motivation for the two-layer design.
+
+**Scale does not help.** In every family the smaller model is safer:
+hymt2-7b (22.97 %) beats hymt2-30b-a3b (30.74 %), translategemma-4b (21.96 %)
+beats translategemma-27b (23.65 %), and qwen35-4b beats what qwen35-27b scored
+before the re-run.
+
+**A low error rate is not the same as a good translation.** The detectors check
+whether specific facts survive, not whether the result reads well or is
+clinically usable. `opus` illustrates the gap directly.
+
+Every figure above comes from a run whose output was checked document by
+document against its source length: none of the listed models truncated any of
+the 33 reports over 1,536 characters. The caveat on `qwen35-4b` above is the one
+exception worth watching — complete output, but produced under a ceiling that
+demonstrably cut other models.
+
+Earlier numbers in [`RESULTS_INFORMATION_LOSS.md`](RESULTS_INFORMATION_LOSS.md)
+predate these fixes and are being revised.
+
 ## Corpora
 
 | Corpus | Direction | Segments | Register | Reference provenance |
@@ -49,7 +105,13 @@ pytest -q
 | HimL 2015/2017 | EN→DE | 472 | Patient-facing | WMT Biomedical, human-translated |
 | EMEA (sampled) | DE→EN | 400 | Drug leaflets | Official EMA translations |
 | PARROT German | DE→EN | 296 | **Radiology reports** | Contributor-supplied — provenance undocumented |
-| PARROT Turkish | TR→EN | 48 | **Radiology reports** | As above; **reduced detector coverage** |
+| PARROT Turkish | TR→EN | 48 | **Radiology reports** | As above; **reduced detector coverage, first run invalid** |
+
+The Turkish subset is small (48 reports from 2 contributors, versus 296 from 10
+for German), ~3.5× longer per report, and covers only CT/XA/US. Its clinical
+detectors are also reduced to the number check alone, since the cue lexicons
+cover EN and DE only. Treat it as a separate experiment, not a language
+comparison.
 
 Convert them into the normalised schema:
 
@@ -115,6 +177,30 @@ Check each upstream licence before use; several are non-commercial.
 a review candidate; its absence is not proof of safety. Known false positives
 are quantified in the results document — for example ~38 % of number findings
 fire only because *extra* numbers appeared, not because one was lost.
+
+**Truncated output looks like bad translation.** Several models silently stopped
+generating part-way through long reports, producing error rates of 88–97 % on
+those documents that measured the cut-off rather than translation quality. Three
+separate causes were involved, each needing a different fix:
+
+* the CLI default of 512 output tokens, too low for a whole report
+  (`MAX_NEW_TOKENS`, now 2048);
+* encoder position limits — Opus 512, NLLB 1024 — which truncate the *input* no
+  matter how large the output ceiling is (`CHUNK_MAX_TOKENS`, which splits on
+  sentence boundaries and reassembles before scoring);
+* decoder position limits, where generating past the table raises an
+  `IndexError` in Marian that surfaces on GPU as an opaque CUDA device-side
+  assert (`MODEL_MAX_NEW_TOKENS`, per model);
+* an *input* ceiling — `--max-input-tokens`, default 512 — which the adapters
+  pass to the tokenizer as `truncation=True`, cutting the source before the
+  prompt is even built (`MAX_INPUT_TOKENS`, now 4096). The symptom is
+  distinctive: the model translates only the tail of the fragment it received,
+  so the output is a mid-word continuation of the *source* language rather than
+  a translation. `qwen35-27b` returned six characters for a 2,998-character
+  report this way.
+
+Always check the hypothesis-to-source length ratio before trusting a score. A
+ratio well below 1.0 on long documents means truncation, not poor translation.
 
 **Detector coverage is language-dependent.** Cue lexicons exist for EN and DE
 only. A TR→EN run therefore scores with the number check alone, so its numbers

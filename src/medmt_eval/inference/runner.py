@@ -21,17 +21,52 @@ def _single_direction(segments: Sequence[Segment]) -> tuple[str, str]:
     return next(iter(directions))
 
 
-def translate_segments(translator: Translator, segments: Sequence[Segment]) -> list[dict[str, Any]]:
-    """Translate validated segments and retain all source/reference provenance."""
+def translate_segments(
+    translator: Translator,
+    segments: Sequence[Segment],
+    *,
+    chunk_max_tokens: int | None = None,
+) -> list[dict[str, Any]]:
+    """Translate validated segments and retain all source/reference provenance.
+
+    With ``chunk_max_tokens`` set, each segment is split on sentence boundaries,
+    the chunks are translated independently, and the pieces are joined back into
+    one hypothesis per segment. This exists for models that cannot ingest a whole
+    document. Encoder position limits (Opus 512, NLLB 1024) truncate a long
+    report on *input*, which no output-length setting can fix.
+
+    Scoring still happens on the reassembled document, so results stay comparable
+    to unchunked runs. The trade-off is lost cross-sentence context; runs using
+    this should be reported as chunked.
+    """
     if not segments:
         return []
     src_lang, tgt_lang = _single_direction(segments)
-    hypotheses = translator.translate([segment.src_text for segment in segments], src_lang, tgt_lang)
+    sources = [segment.src_text for segment in segments]
+
+    if chunk_max_tokens:
+        from medmt_eval.data.chunking import chunk_documents, reassemble
+
+        chunks, counts = chunk_documents(sources, max_tokens=chunk_max_tokens)
+        translated = translator.translate(chunks, src_lang, tgt_lang)
+        if len(translated) != len(chunks):
+            raise RuntimeError(
+                f"Translator {translator.name!r} returned {len(translated)} outputs "
+                f"for {len(chunks)} chunks."
+            )
+        hypotheses = reassemble(translated, counts)
+    else:
+        hypotheses = translator.translate(sources, src_lang, tgt_lang)
+
     if len(hypotheses) != len(segments):
         raise RuntimeError(
             f"Translator {translator.name!r} returned {len(hypotheses)} outputs for {len(segments)} inputs."
         )
-    generation = translator.generation_config
+    generation = dict(translator.generation_config)
+    if chunk_max_tokens:
+        # Recorded so a chunked run is never mistaken for an unchunked one.
+        generation["chunked"] = True
+        generation["chunk_max_tokens"] = chunk_max_tokens
     output: list[dict[str, Any]] = []
     for segment, hypothesis in zip(segments, hypotheses):
         row = segment.to_dict()

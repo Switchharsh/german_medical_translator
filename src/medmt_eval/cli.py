@@ -84,7 +84,10 @@ def command_translate(args: argparse.Namespace) -> int:
         api_key=getattr(args, "api_key", None),
         free_tier=not getattr(args, "paid_tier", False),
     )
-    output = translate_segments(translator, segments)
+    output = translate_segments(
+        translator, segments,
+        chunk_max_tokens=getattr(args, "chunk_max_tokens", 0) or None,
+    )
     write_jsonl(output, args.output)
     if args.parquet:
         write_parquet(output, args.parquet)
@@ -129,14 +132,20 @@ def command_run(args: argparse.Namespace) -> int:
         api_key=getattr(args, "api_key", None),
         free_tier=not getattr(args, "paid_tier", False),
     )
-    predictions = translate_segments(translator, segments)
+    predictions = translate_segments(
+        translator, segments,
+        chunk_max_tokens=getattr(args, "chunk_max_tokens", 0) or None,
+    )
     if args.predictions_output:
         write_jsonl(predictions, args.predictions_output)
     evaluations, summary = evaluate_hypotheses(
         segments,
         [str(row["hyp_text"]) for row in predictions],
         model=translator.name,
-        generation=translator.generation_config,
+        # Take the generation record from the predictions, not the translator:
+        # translate_segments adds the `chunked`/`chunk_max_tokens` markers there,
+        # and reading it off the translator would silently drop them.
+        generation=predictions[0].get("generation") if predictions else translator.generation_config,
         safety_evaluator=_safety_evaluator(args.term_bank),
         comet=_comet_from_args(args),
         comet_batch_size=args.comet_batch_size,
@@ -302,6 +311,12 @@ def _add_model_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--max-input-tokens", type=int, default=512)
     parser.add_argument("--max-new-tokens", type=int, default=512)
     parser.add_argument("--device", help="Torch device, for example cuda or cpu")
+    parser.add_argument(
+        "--chunk-max-tokens", type=int, default=0,
+        help="Split each segment on sentence boundaries into chunks of at most N "
+             "tokens, translate separately, then reassemble before scoring. Needed "
+             "for models with a hard encoder limit (e.g. NLLB at 512). 0 disables.",
+    )
     parser.add_argument("--prompt-template", help="Custom prompt template for prompted-llm adapter")
     parser.add_argument("--api-key", help="API key for deepl or hosted-llm adapters")
     parser.add_argument(

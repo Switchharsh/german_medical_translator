@@ -65,11 +65,19 @@ adapter aborts on a mismatch rather than mislabelling a result.
 
 ## PARROT Turkish (TR→EN)
 
-48 reports. **Reduced detector coverage** — the cue lexicons cover EN and DE
-only, so negation, laterality and terminology all skip and only the
-language-agnostic number check runs. Results are *not* comparable to the German
-ones, and the `identity` baseline is no longer a meaningful floor (it scores 0 %
-here versus ~96 % on German). See `lib/parrot_tr_common.sh` for the full caveat.
+48 reports. Two caveats, both significant:
+
+**Reduced detector coverage.** The cue lexicons cover EN and DE only, so
+negation, laterality and terminology all skip and only the language-agnostic
+number check runs. Results are *not* comparable to the German ones, and
+`identity` is no longer a meaningful floor — it scores 0 % here versus ~96 % on
+German, because copying the source through trivially preserves every number.
+
+**The first run (jobs 3941775–3941778) is invalid.** The tier scripts did not
+pass `--max-new-tokens`, so models inherited the 512-token CLI default and were
+truncated mid-report — Turkish reports have a median length of ~2,080 characters.
+See [`results/parrot_tr/INVALID_RUNS.md`](../results/parrot_tr/INVALID_RUNS.md).
+Fixed here; re-run into a **fresh** directory rather than resuming.
 
 ```bash
 sbatch scripts/parrot_tr/small.slurm
@@ -79,6 +87,19 @@ sbatch scripts/parrot_tr/large.slurm
 
 API_MODEL=glm-5.2 sbatch scripts/parrot_tr/api.slurm
 ```
+
+## Output length
+
+`lib/bench_common.sh` passes `--max-new-tokens` explicitly (default **2048**);
+`lib/parrot_tr_common.sh` raises it to **3072** for the longer Turkish reports.
+Override per run if needed — an explicit value always wins:
+
+```bash
+MAX_NEW_TOKENS=4096 sbatch scripts/parrot_tr/large.slurm
+```
+
+The CLI default of 512 is too low for whole radiology reports and truncates
+silently, which reads as terrible translation quality rather than a config error.
 
 ## Utilities
 
