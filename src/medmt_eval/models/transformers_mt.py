@@ -82,6 +82,8 @@ class OpusMTTranslator(_TransformersTranslator):
 
     name = "opus"
     default_model_id = "Helsinki-NLP/opus-mt-en-de"
+    # One checkpoint per direction, and the instance pins itself on first use.
+    direction_specific = True
     # Helsinki-NLP ships one checkpoint per direction, so each pair needs an
     # explicit entry; an unmapped direction raises rather than silently using
     # the wrong model.

@@ -40,6 +40,14 @@ class Translator(ABC):
 
     name: str
 
+    #: True when one instance can serve only a single language direction, so a
+    #: caller translating both ways must build two. Marian/Opus ships a separate
+    #: checkpoint per pair and pins itself to the first direction used. Every
+    #: other adapter takes the direction as a call argument, so a single loaded
+    #: instance handles both — which matters because holding two copies of a 14 GB
+    #: model doubles memory and overflowed a 20 GB MIG slice.
+    direction_specific: bool = False
+
     @abstractmethod
     def translate(self, texts: list[str], src_lang: str, tgt_lang: str) -> list[str]:
         """Translate a non-empty list, preserving its order."""

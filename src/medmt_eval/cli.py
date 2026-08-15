@@ -292,6 +292,58 @@ def command_convert_parrot(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_roundtrip(args: argparse.Namespace) -> int:
+    """Iteratively translate back and forth, scoring every step against fixed anchors."""
+    from medmt_eval.inference.roundtrip import run_roundtrip, summarise_by_step
+
+    segments = load_segments(
+        args.input,
+        default_src_lang=args.src_lang,
+        default_tgt_lang=args.tgt_lang,
+        reverse=args.reverse,
+    )
+    if args.sample_size and args.sample_size < len(segments):
+        # Deterministic, length-stratified subsample: 20 translation passes over
+        # the full corpus is far beyond the wall-clock limit for larger models.
+        import random
+
+        ordered = sorted(segments, key=lambda s: len(s.src_text))
+        stride = len(ordered) / args.sample_size
+        segments = [ordered[int(i * stride)] for i in range(args.sample_size)]
+        random.Random(args.seed).shuffle(segments)
+
+    def factory(src: str, tgt: str):
+        # A fresh instance per direction: Opus ships one checkpoint per pair and
+        # refuses to switch direction on a live instance.
+        return create_translator(
+            args.model,
+            model_id=args.model_id,
+            batch_size=args.batch_size,
+            num_beams=args.num_beams,
+            max_input_tokens=args.max_input_tokens,
+            max_new_tokens=args.max_new_tokens,
+            device=args.device,
+            prompt_template=getattr(args, "prompt_template", None),
+            api_key=getattr(args, "api_key", None),
+            free_tier=not getattr(args, "paid_tier", False),
+        )
+
+    rows = run_roundtrip(
+        factory,
+        segments,
+        cycles=args.cycles,
+        safety_evaluator=_safety_evaluator(args.term_bank),
+        chunk_max_tokens=getattr(args, "chunk_max_tokens", 0) or None,
+        progress=lambda msg: print(msg, file=sys.stderr, flush=True),
+    )
+    write_jsonl(rows, args.output)
+    summary = summarise_by_step(rows)
+    _save_json({"steps": summary}, args.summary or f"{args.output}.summary.json")
+    print(json.dumps({"output": args.output, "n_rows": len(rows),
+                      "n_segments": len(segments), "cycles": args.cycles}))
+    return 0
+
+
 def _add_data_args(parser: argparse.ArgumentParser, *, allow_reverse: bool = True) -> None:
     parser.add_argument("--input", required=True, help="JSONL, CSV, TSV, or Parquet input")
     parser.add_argument("--src-lang", help="Default source language when input omits it (en/de)")
@@ -436,6 +488,22 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parrot.add_argument("--tgt-lang", default="en")
     parrot.set_defaults(handler=command_convert_parrot)
+
+    roundtrip = commands.add_parser(
+        "roundtrip",
+        help="Translate back and forth for N cycles, scoring every step",
+    )
+    _add_data_args(roundtrip)
+    _add_model_args(roundtrip)
+    roundtrip.add_argument("--cycles", type=int, default=10,
+                           help="Cycles; each is 2 passes (default 10 = 20 passes)")
+    roundtrip.add_argument("--sample-size", type=int, default=0,
+                           help="Length-stratified subsample; 0 = whole corpus")
+    roundtrip.add_argument("--seed", type=int, default=13)
+    roundtrip.add_argument("--term-bank")
+    roundtrip.add_argument("--output", required=True)
+    roundtrip.add_argument("--summary")
+    roundtrip.set_defaults(handler=command_roundtrip)
 
     return parser
 
