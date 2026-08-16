@@ -9,12 +9,13 @@ reports **two layers side by side**:
 
 The point is to make the divergence visible: a fluent translation can score well
 on surface metrics and still invert a negation or drop a measurement. In this
-project's own results that divergence is real — on German radiology reports the
-best-BLEU system (`translategemma-27b`, BLEU 55.0) ranks seventh of ten on
-clinical errors, while the safest system (`opus`, 18.9 %) has the worst BLEU of
-any real translator.
+project's own results that divergence is real, and it survives every way of
+looking at it: on German radiology reports the best-BLEU system
+(`translategemma-27b`, BLEU 55.02) ranks fifth of twelve on clinical errors, and
+under round-trip translation two systems that are indistinguishable on a single
+pass differ by a factor of 2.4 in how much they lose.
 
-**Findings live in [`RESULTS_INFORMATION_LOSS.md`](RESULTS_INFORMATION_LOSS.md).**
+**Start with [`thesis/00-overview.md`](thesis/00-overview.md).**
 
 ## Layout
 
@@ -31,7 +32,9 @@ scripts/               SLURM jobs, grouped by corpus — see scripts/README.md
 data/derived/          converted corpora (gitignored, regenerate with `convert`)
 datasets/              raw downloads (gitignored)
 results/               run outputs (gitignored)
-tests/                 117 tests, no GPU or network needed
+figures/               publication PNGs (scripts/make_figures.py)
+thesis/                the write-up — start at thesis/00-overview.md
+tests/                 141 tests, no GPU or network needed
 ```
 
 ## Install
@@ -46,57 +49,82 @@ pytest -q
 
 ## Current results — PARROT German radiology reports (DE→EN)
 
-296 reports, scored per document. `crit%` is the share of reports containing at
-least one critical clinical finding (negation flip, laterality error, or
-number/measurement mismatch). Lower is better; BLEU/chrF higher is better.
+Full corpus, 296 reports, scored per document. `crit%` is the share of reports
+containing at least one **critical** clinical finding (negation flip, laterality
+error, or number/measurement mismatch); terminology findings are `major` and do
+not count toward it.
 
-| Model | Type | crit% | BLEU | chrF | TER |
+| System | Type | crit% ↓ | BLEU ↑ | chrF++ ↑ | TER ↓ |
 |---|---|---|---|---|---|
-| opus | local | **18.92 %** | 27.39 | 54.07 | 56.92 |
-| glm-5.2 | cloud | 19.26 % | 51.34 | 73.42 | 34.80 |
-| DeepSeek-V4-Flash | cloud | 19.93 % | 53.75 | 74.70 | 33.26 |
-| MiniMax-M3 | cloud | 21.28 % | 53.49 | 74.80 | 33.46 |
-| translategemma-4b | local | 21.96 % | 45.02 | 68.44 | 44.04 |
-| hymt2-7b | local | 22.97 % | 46.42 | 69.71 | 41.72 |
-| translategemma-27b | local | 23.65 % | **55.02** | **75.80** | 34.94 |
-| qwen35-4b | local | 24.66 % | 47.92 | 70.20 | 55.96 |
-| hymt2-1.8b | local | 25.34 % | 39.43 | 64.55 | 48.13 |
-| hymt2-30b-a3b | local | 30.74 % | 47.98 | 71.59 | 40.95 |
-| *identity (baseline)* | — | *95.95 %* | *3.25* | *25.63* | *94.25* |
+| `glm-5.2` | cloud | 19.26 | 51.34 | 73.42 | 34.80 |
+| `DeepSeek-V4-Flash` | cloud | 19.93 | 53.75 | 74.70 | 33.26 |
+| `MiniMax-M3` | cloud | 21.28 | 53.49 | 74.80 | 33.46 |
+| `translategemma-4b` | local | 22.97 | 44.68 | 68.04 | 45.20 |
+| `translategemma-27b` | local | 23.65 | 55.02 | 75.80 | 34.94 |
+| `hymt2-7b` | local | 24.32 | 45.99 | 69.17 | 42.83 |
+| `qwen35-4b` | local | 24.66 | 47.95 | 69.02 | 40.89 |
+| `hymt2-1.8b` | local | 25.34 | 39.11 | 64.17 | 49.05 |
+| `opus` | local | 26.69 | 24.62 | 49.05 | 61.40 |
+| `qwen35-27b` | local | 28.38 | 51.74 | 70.41 | 38.20 |
+| `hymt2-30b-a3b` | local | 31.08 | 47.71 | 71.16 | 41.78 |
+| `nllb` | local | 33.45 | 21.76 | 46.59 | 64.96 |
+| `identity` *(control)* | — | *95.95* | *3.25* | *25.63* | *94.25* |
 
-Two models are absent: `nllb` and `qwen35-27b` both returned output truncated on
-long documents (23/33 and 24/33 respectively) and are excluded until re-run. The
-cause was an *input* ceiling — see Limitations.
+All twelve systems now have complete results — the earlier truncation problems
+affecting `nllb`, `qwen35-27b` and `translategemma-27b` are fixed (four separate
+causes: generation ceiling, encoder limit, decoder limit, input ceiling).
 
-`qwen35-4b` ran under that same input ceiling. Its output is complete on every
-document (0/33), because its translations are short enough not to expose the
-cut, but it should be re-run alongside the other two before the table is
-treated as final.
-
-**Surface quality and clinical safety do not agree.** `opus` has the lowest
-critical-error rate of any system while scoring worst on BLEU among real
-translators — its output is stilted but preserves numbers and negations.
-`translategemma-27b` is the reverse: best BLEU and chrF, yet seventh of ten on
-clinical errors. Ranking by BLEU alone would misorder the systems on the axis
-that matters clinically. This is the central motivation for the two-layer design.
+**Surface quality and clinical safety do not agree.** `translategemma-27b` has
+the best BLEU (55.02) and chrF++ (75.80) of any system and ranks fifth of twelve
+on clinical errors. `glm-5.2` has the lowest critical-error rate at 19.26% while
+scoring 3.7 BLEU lower. Ranking by BLEU misorders the systems on the axis that
+matters clinically — the central motivation for the two-layer design.
 
 **Scale does not help.** In every family the smaller model is safer:
-hymt2-7b (22.97 %) beats hymt2-30b-a3b (30.74 %), translategemma-4b (21.96 %)
-beats translategemma-27b (23.65 %), and qwen35-4b beats what qwen35-27b scored
-before the re-run.
+`hymt2-7b` (24.32%) beats `hymt2-30b-a3b` (31.08%), `translategemma-4b` (22.97%)
+beats `translategemma-27b` (23.65%), and `qwen35-4b` (24.66%) beats
+`qwen35-27b` (28.38%).
 
 **A low error rate is not the same as a good translation.** The detectors check
-whether specific facts survive, not whether the result reads well or is
-clinically usable. `opus` illustrates the gap directly.
+whether specific facts survive, not whether the output reads well. `opus`
+illustrates the gap: it scores 24.62 BLEU — barely above the `nllb` floor — and
+its output *shrinks* relative to the source, which suppresses detector findings
+without making it safer.
 
-Every figure above comes from a run whose output was checked document by
-document against its source length: none of the listed models truncated any of
-the 33 reports over 1,536 characters. The caveat on `qwen35-4b` above is the one
-exception worth watching — complete output, but produced under a ceiling that
-demonstrably cut other models.
+## Round-trip degradation — 10 cycles, 20 passes
 
-Earlier numbers in [`RESULTS_INFORMATION_LOSS.md`](RESULTS_INFORMATION_LOSS.md)
-predate these fixes and are being revised.
+All thirteen entries, DE→EN→DE for ten cycles on a 20-report stratified sample.
+English outputs scored against the human English reference, German outputs
+against the original German; both anchors fixed, so cycle 1 is the ordinary
+single-pass evaluation.
+
+![Round-trip curves](figures/fig1_roundtrip_curves.png)
+
+Three findings:
+
+1. **Degradation is front-loaded.** 77% of all BLEU lost across ten round trips
+   is lost in the first one; the text then reaches a fixed point rather than
+   decaying without bound. True for all twelve systems regardless of size.
+2. **Round-trip stability is an independent axis.** `translategemma-27b` and
+   `qwen35-27b` are indistinguishable on one pass (57.1 vs 57.6) and differ by a
+   factor of 2.4 in round-trip loss (−12.25 vs −5.03).
+3. **The hosted APIs lead on clinical safety**, taking the three most stable
+   positions and the two lowest genuine error rates (30%).
+
+![BLEU vs clinical error](figures/fig4_bleu_vs_clinical.png)
+
+Full tables, all five figures and interpretation: **[`thesis/05-results.md`](thesis/05-results.md)**.
+
+## Documentation
+
+| Document | Contents |
+|---|---|
+| **[`thesis/`](thesis/)** | The write-up — dataset, models, methods, experiments, results |
+| [`thesis/06-metrics.md`](thesis/06-metrics.md) | **Every metric: how it is computed, how to read it, why it is here** |
+| [`thesis/07-metric-roadmap.md`](thesis/07-metric-roadmap.md) | COMET, XCOMET/MetricX, LLM-as-judge, MQM — assessed and prioritised |
+| [`RESULTS_INFORMATION_LOSS.md`](RESULTS_INFORMATION_LOSS.md) | Original detailed results write-up |
+| [`TRANSLATION_EXAMPLES.md`](TRANSLATION_EXAMPLES.md) | 126 side-by-side translations |
+| [`figures/`](figures/) | Publication PNGs, regenerate with `scripts/make_figures.py` |
 
 ## Corpora
 

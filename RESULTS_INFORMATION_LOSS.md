@@ -1,5 +1,11 @@
 # Clinical Information Loss in EN↔DE Medical Machine Translation
 
+> **This document is the original detailed write-up.** The consolidated results — all
+> thirteen systems, the ten-cycle round-trip experiment, the figures, and a full metric
+> reference — now live in [`thesis/`](thesis/). Start at
+> [`thesis/00-overview.md`](thesis/00-overview.md). Sections below marked with an update
+> note have been superseded.
+
 **Date:** 2026-07-29
 **Pipeline:** `medmt-eval` (this repository)
 **Question:** Do current MT systems lose clinically critical information when translating
@@ -116,10 +122,15 @@ comparison is "what is reachable" rather than a controlled scale study.
 | nllb | | 33.45 % | 13 | 75 | 51 | 104 | 21.76 | 46.59 | 64.96 |
 | *identity* | | *95.95 %* | *252* | *0* | *211* | *150* | *3.25* | *25.63* | *94.25* |
 
-(BLEU/chrF/TER are means of per-segment scores. `translategemma-27b` is missing: it failed
-with HTTP 401 on the gated `google/translategemma-27b-it` repository, because the Hugging
-Face token was absent from the job environment on that run. `translategemma-4b` failed the
-same way initially and was re-run successfully once the token was set.)
+(BLEU/chrF/TER are means of per-segment scores.)
+
+**Update 2026-08-15 — `translategemma-27b` completed.** The HTTP 401 on the gated
+`google/translategemma-27b-it` repository was an environment problem, not a model problem:
+SLURM inherits the submitting shell's environment and `HF_TOKEN` was not exported into it.
+Its full-corpus result is **23.65 %** critical errors at BLEU **55.02** / chrF++ **75.80** —
+the **best surface scores of any system**, ranking fifth of twelve on clinical errors. It is
+included in the complete table in [`README.md`](README.md) and
+[`thesis/05-results.md`](thesis/05-results.md); the table above predates it.
 
 ### Findings specific to report text
 
@@ -256,6 +267,12 @@ for patient safety and the clearest target for any future work.
 `terminology_not_preserved` never fired. The starter term bank contains only 8 radiology
 concepts and the corpora are not radiology text, so this detector was effectively untested,
 not "passed".
+
+**A framing correction.** Terminology findings carry severity `major`, not `critical`, and
+therefore contribute **zero** to every critical-error rate reported in this document. On the
+PARROT radiology corpus the detector does fire — often — but those findings never entered the
+`crit%` column. Read the two as separate signals. Among findings that *do* count as critical,
+numbers dominate at 63.3 %.
 
 ### Surface quality does not predict information loss
 

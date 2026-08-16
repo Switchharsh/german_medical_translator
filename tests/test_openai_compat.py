@@ -176,3 +176,146 @@ def test_missing_api_key_raises_clearly(monkeypatch) -> None:
         assert "OPENAI_COMPAT_API_KEY" in str(error)
     else:  # pragma: no cover
         raise AssertionError("expected RuntimeError for missing API key")
+
+
+def test_dated_snapshot_is_not_a_substitution() -> None:
+    """The gateway pins DeepSeek-V4-Flash to a dated build; same model, so the
+    strict check must accept it (this killed job 4008964)."""
+    translator = OpenAICompatTranslator(api_key="k", model_id="DeepSeek-V4-Flash")
+    translator._check_served_model("deepseek-ai/deepseek-v4-flash-0731")
+    assert translator.generation_config["model_substitution"] is False
+
+
+def test_snapshot_tag_does_not_excuse_a_different_name() -> None:
+    """Stripping a version tag must not let a genuinely different model pass."""
+    translator = OpenAICompatTranslator(
+        api_key="k", model_id="DeepSeek-V4-Pro", strict_model=False
+    )
+    translator._check_served_model("nvidia/nemotron-3-ultra-550b-a55b-0731")
+    assert translator.generation_config["model_substitution"] is True
+
+
+def test_version_difference_alone_is_tolerated_but_family_is_not() -> None:
+    assert OpenAICompatTranslator._same_model("glm-5.2", "z-ai/glm-5.2-v2")
+    assert not OpenAICompatTranslator._same_model("glm-5.2", "z-ai/glm-4.6")
+
+
+class _Resp:
+    def __init__(self, status, headers=None, payload=None):
+        self.status_code = status
+        self.headers = headers or {}
+        self._payload = payload or {
+            "model": "m", "choices": [{"message": {"content": "ok"}}]
+        }
+
+    def json(self):
+        return self._payload
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            import requests
+            raise requests.HTTPError(f"{self.status_code} Client Error", response=self)
+
+
+def test_rate_limit_is_retried_then_succeeds(monkeypatch) -> None:
+    """A 429 must be retried with backoff rather than killing the run."""
+    calls = []
+    slept = []
+    monkeypatch.setattr("medmt_eval.models.openai_compat_mt._time.sleep", slept.append)
+
+    def fake_post(*_a, **_k):
+        calls.append(1)
+        return _Resp(429) if len(calls) < 3 else _Resp(200)
+
+    monkeypatch.setattr("medmt_eval.models.openai_compat_mt._requests.post", fake_post)
+    translator = OpenAICompatTranslator(api_key="k", model_id="m")
+    assert translator._complete("hi") == "ok"
+    assert len(calls) == 3
+    assert len(slept) == 2 and all(s > 0 for s in slept)
+
+
+def test_retry_honours_retry_after_header(monkeypatch) -> None:
+    slept = []
+    monkeypatch.setattr("medmt_eval.models.openai_compat_mt._time.sleep", slept.append)
+    calls = []
+
+    def fake_post(*_a, **_k):
+        calls.append(1)
+        return _Resp(429, {"Retry-After": "7"}) if len(calls) < 2 else _Resp(200)
+
+    monkeypatch.setattr("medmt_eval.models.openai_compat_mt._requests.post", fake_post)
+    OpenAICompatTranslator(api_key="k", model_id="m")._complete("hi")
+    assert slept == [7.0]
+
+
+def test_persistent_rate_limit_finally_raises(monkeypatch) -> None:
+    import requests
+    monkeypatch.setattr("medmt_eval.models.openai_compat_mt._time.sleep", lambda _s: None)
+    monkeypatch.setattr(
+        "medmt_eval.models.openai_compat_mt._requests.post", lambda *a, **k: _Resp(429)
+    )
+    translator = OpenAICompatTranslator(api_key="k", model_id="m")
+    try:
+        translator._complete("hi")
+    except requests.HTTPError:
+        pass
+    else:  # pragma: no cover
+        raise AssertionError("expected HTTPError after retries are exhausted")
+
+
+def test_rate_limited_batch_does_not_fan_out_into_single_requests(monkeypatch) -> None:
+    """The per-item fallback must not multiply a 429 by the batch size."""
+    import requests
+    posts = []
+    monkeypatch.setattr("medmt_eval.models.openai_compat_mt._time.sleep", lambda _s: None)
+
+    def fake_post(*_a, **_k):
+        posts.append(1)
+        return _Resp(429)
+
+    monkeypatch.setattr("medmt_eval.models.openai_compat_mt._requests.post", fake_post)
+    translator = OpenAICompatTranslator(api_key="k", model_id="m")
+    try:
+        translator._translate_batch(["a", "b", "c", "d"], "de", "en")
+    except requests.HTTPError:
+        pass
+    else:  # pragma: no cover
+        raise AssertionError("expected HTTPError to propagate")
+    # 1 batch request x (1 + _MAX_RETRIES) attempts, and no per-item retries.
+    from medmt_eval.models.openai_compat_mt import _MAX_RETRIES
+    assert len(posts) == _MAX_RETRIES + 1
+
+
+def test_origin_timeout_is_retried(monkeypatch) -> None:
+    """Cloudflare 524 killed job 4009014; it must be retried like any timeout."""
+    calls = []
+    monkeypatch.setattr("medmt_eval.models.openai_compat_mt._time.sleep", lambda _s: None)
+
+    def fake_post(*_a, **_k):
+        calls.append(1)
+        return _Resp(524) if len(calls) < 3 else _Resp(200)
+
+    monkeypatch.setattr("medmt_eval.models.openai_compat_mt._requests.post", fake_post)
+    assert OpenAICompatTranslator(api_key="k", model_id="m")._complete("hi") == "ok"
+    assert len(calls) == 3
+
+
+def test_timed_out_batch_does_fan_out_into_single_requests(monkeypatch) -> None:
+    """Unlike a 429, a timeout is cured by sending SMALLER requests, so the
+    per-item fallback must still run."""
+    monkeypatch.setattr("medmt_eval.models.openai_compat_mt._time.sleep", lambda _s: None)
+    seen = []
+
+    def fake_post(*_a, **kw):
+        prompt = kw["json"]["messages"][0]["content"]
+        seen.append(prompt)
+        # The batch prompt carries [[1]] .. [[n]]; single prompts do not.
+        if "[[2]]" in prompt:
+            return _Resp(524)
+        return _Resp(200, payload={"model": "m",
+                                   "choices": [{"message": {"content": "out"}}]})
+
+    monkeypatch.setattr("medmt_eval.models.openai_compat_mt._requests.post", fake_post)
+    translator = OpenAICompatTranslator(api_key="k", model_id="m")
+    assert translator._translate_batch(["a", "b", "c"], "de", "en") == ["out"] * 3
+    assert sum(1 for p in seen if "[[2]]" not in p) == 3  # one call per item

@@ -35,8 +35,10 @@ extra time rather than silently misaligning the output.
 from __future__ import annotations
 
 import os
+import random as _random
 import re
 import threading as _threading
+import time as _time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
@@ -50,6 +52,32 @@ _DEFAULT_MODEL = "glm-5.2"
 
 # Generous: this endpoint has been observed taking ~3 minutes per request.
 _DEFAULT_TIMEOUT = 900
+
+# A trailing snapshot/version tag on a served model name: "-0731", "-20260731",
+# "-v2". Digits only (optionally v-prefixed) so that a genuinely different name
+# can never be explained away as a version difference.
+_SNAPSHOT_TAG = re.compile(r"-v?\d+$")
+
+# Rate limiting. The gateway returns 429 once several jobs share the key, which
+# previously killed a run outright (jobs 4008963/4008965). Retry with
+# exponential backoff, honouring Retry-After when the server sends it.
+#
+# 408 and the Cloudflare 52x family matter as much as 429 here: this gateway
+# sits behind Cloudflare and returned "524 Response Timeout by Origin Server"
+# after 78 minutes on DeepSeek-V4-Flash (job 4009014), a slow model asked for a
+# whole batch at once.
+_RETRY_STATUS = frozenset({408, 429, 500, 502, 503, 504, 520, 521, 522, 523, 524, 527})
+_MAX_RETRIES = 6
+_BACKOFF_BASE = 2.0
+_BACKOFF_CAP = 60.0
+
+# Statuses where splitting a failed batch into single requests would make
+# things worse rather than better. A 429 means "you are sending too much", so
+# turning one request into `batch_size` more deepens exactly the problem. Every
+# other retryable status means "this particular request did not come back" —
+# and for a timeout, smaller requests are precisely the recovery, since one
+# report per call generates a fraction of the tokens a full batch does.
+_NO_FANOUT_STATUS = frozenset({429})
 
 _SINGLE_TEMPLATE = (
     "Translate the following medical text from {source_lang} to {target_lang}. "
@@ -164,21 +192,38 @@ class OpenAICompatTranslator(Translator):
             # Batches return several full reports, so scale the ceiling with the
             # batch size rather than using the per-segment value directly.
             payload["max_tokens"] = self._config.max_new_tokens * max(1, self._config.batch_size)
-        response = _requests.post(
-            self.base_url,
-            headers={
-                "Authorization": f"Bearer {self._key()}",
-                "Content-Type": "application/json",
-            },
-            json=payload,
-            timeout=self._timeout,
-        )
+        headers = {
+            "Authorization": f"Bearer {self._key()}",
+            "Content-Type": "application/json",
+        }
+        for attempt in range(_MAX_RETRIES + 1):
+            response = _requests.post(
+                self.base_url, headers=headers, json=payload, timeout=self._timeout
+            )
+            if response.status_code not in _RETRY_STATUS or attempt == _MAX_RETRIES:
+                break
+            _time.sleep(self._retry_delay(response, attempt))
         response.raise_for_status()
         data = response.json()
         self._check_served_model(data.get("model"))
         # Reasoning models on this gateway return their chain of thought in a
         # separate `reasoning_content` field; only `content` is the answer.
         return str(data["choices"][0]["message"]["content"])
+
+    @staticmethod
+    def _retry_delay(response: Any, attempt: int) -> float:
+        """Seconds to wait before retrying, honouring Retry-After if present.
+
+        Jitter is added so that concurrent workers hitting the same 429 do not
+        all wake at the same instant and reproduce the burst that caused it.
+        """
+        header = response.headers.get("Retry-After") if response.headers else None
+        if header:
+            try:
+                return min(float(header), _BACKOFF_CAP)
+            except ValueError:
+                pass  # a HTTP-date Retry-After: fall through to backoff
+        return min(_BACKOFF_BASE**attempt, _BACKOFF_CAP) * (0.5 + _random.random())
 
     @staticmethod
     def _same_model(requested: str, served: str) -> bool:
@@ -189,13 +234,21 @@ class OpenAICompatTranslator(Translator):
         ``DeepSeek-V4-Flash`` yields ``deepseek-ai/deepseek-v4-flash``. Those are
         the same model and must not be flagged.
 
+        Endpoints also pin an alias to a dated snapshot: ``DeepSeek-V4-Flash``
+        is answered by ``deepseek-ai/deepseek-v4-flash-0731``. That is still the
+        requested model, so a trailing numeric snapshot/version tag is stripped
+        before comparing.
+
         A genuine substitution looks different: ``DeepSeek-V4-Pro`` answered by
         ``nvidia/nemotron-3-ultra-550b-a55b``, where the final path component
-        does not match at all. Comparing only the component after the last "/"
-        separates the two cases.
+        does not match at all. Comparing only the component after the last "/",
+        minus any snapshot tag, separates the two cases. The tag pattern is kept
+        deliberately narrow — digits only, optionally ``v``-prefixed — so that a
+        differing *name* can never be mistaken for a differing *version*.
         """
         def leaf(name: str) -> str:
-            return name.strip().lower().rsplit("/", 1)[-1]
+            base = name.strip().lower().rsplit("/", 1)[-1]
+            return _SNAPSHOT_TAG.sub("", base)
 
         return leaf(requested) == leaf(served)
 
@@ -238,10 +291,18 @@ class OpenAICompatTranslator(Translator):
             items = parse_batch_response(strip_thinking(content), len(batch))
             if items is not None:
                 return [strip_thinking(item) for item in items]
+        except _requests.HTTPError as error:
+            # The transport already retried this with backoff. Whether to split
+            # the batch depends on *why* it failed: a rate limit must not be
+            # multiplied by `len(batch)`, but a timeout on an oversized request
+            # is best answered by sending smaller ones.
+            status = getattr(error.response, "status_code", None)
+            if status in _NO_FANOUT_STATUS:
+                raise
         except Exception:  # noqa: BLE001 - fall back rather than lose the batch
             pass
-        # Unparseable or failed batch: redo it one item at a time so a
-        # formatting glitch costs time instead of corrupting alignment.
+        # Unparseable batch: redo it one item at a time so a formatting glitch
+        # costs time instead of corrupting alignment.
         return [self._translate_one(text, src_lang, tgt_lang) for text in batch]
 
     def translate(self, texts: list[str], src_lang: str, tgt_lang: str) -> list[str]:
