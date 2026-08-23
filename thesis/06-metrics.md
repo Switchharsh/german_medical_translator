@@ -1,7 +1,8 @@
 # Metrics: what we compute, how to read it, and why
 
-Two independent layers are computed over every translation. They answer different
-questions and they disagree, which is the point.
+Four instruments across three layers. They answer different questions and they
+disagree with each other, which is the point — §4 shows BLEU, COMET and the
+clinical detectors producing three different rankings of the same systems.
 
 | Layer | Metric | Range | Direction | Needs a reference? |
 |---|---|---|---|---|
@@ -10,6 +11,8 @@ questions and they disagree, which is the point.
 | Surface | TER | 0–∞ (usually 0–100) | **lower** better | yes |
 | Clinical | critical-error rate | 0–100% | **lower** better | no — compares source to output |
 | Clinical | finding counts by code | integer | lower better | no |
+| Semantic | COMET | ~0–1 | higher better | yes |
+| Clinical (open-class) | LLM judge, critical-error rate | 0–100% | **lower** better | no — compares source to output |
 
 ---
 
@@ -243,7 +246,76 @@ the convergence claim in [05-results.md](05-results.md).
 
 ---
 
-## 4. What is deliberately *not* used
+## 4. COMET — the learned semantic metric
+
+**What it is.** Source, hypothesis and reference are each encoded with
+XLM-R-large; the embeddings and their combinations feed a feed-forward regressor
+trained to predict human MQM scores. Checkpoint in use:
+`Unbabel/wmt22-comet-da` (reference-based).
+
+**How to read it.** Roughly 0–1, higher better, but the scale is compressed and
+not calibrated across language pairs — on this corpus the entire real field spans
+0.67 to 0.83, and the `identity` control sits at 0.61. **Differences under ~0.01
+should not be read as meaningful**, and a COMET score is never comparable across
+test sets.
+
+**Why it is here.** It fixes the specific failure demonstrated in §0: BLEU
+punishes a harmless paraphrase (53.04) harder than a dropped negation (84.46)
+because it counts n-grams. COMET reasons over representations, so paraphrase
+stops being penalised. It is the standard modern answer to "BLEU is not enough".
+
+**What it cannot do, and this is measured rather than assumed.** It still does not
+track clinical risk. On this corpus it ranks `hymt2-30b-a3b` **first** — a system
+sixth on BLEU and second-worst of eleven on critical clinical errors. See
+[07-metric-roadmap.md](07-metric-roadmap.md) for the full table. It is also
+off-distribution here: trained on WMT news, applied to radiology reports, and
+learned metrics are documented to degrade outside their training domain
+([arXiv:2402.18747](https://arxiv.org/abs/2402.18747)).
+
+**Operational note.** `unbabel-comet` 2.2.7 requires `transformers` 4.x and
+cannot share this project's environment; it lives in `.venv-comet`. Installing it
+into the main venv downgraded transformers and broke `Qwen3.5` loading for
+unrelated jobs.
+
+## 5. LLM-as-judge with a clinical rubric
+
+**What it is.** A strong model is prompted to annotate error spans in the
+translation, given only the source. Implemented in
+[`metrics/llm_judge.py`](../src/medmt_eval/metrics/llm_judge.py), following
+GEMBA-MQM ([arXiv:2310.13988](https://arxiv.org/abs/2310.13988)) with two
+deliberate departures:
+
+- **The rubric is clinical, not generic.** GEMBA's categories are
+  accuracy/fluency/terminology, which cannot distinguish a mistranslated
+  adjective from a mistranslated vertebra level. The categories here are
+  `negation`, `laterality`, `measurement`, `anatomy`, `finding`, `certainty`,
+  `terminology`, `omission`, and severity is defined by effect on patient
+  management rather than by linguistic magnitude.
+- **It scores against the source, never a reference**, so legitimate paraphrase
+  is not penalised.
+
+**Why it is here.** It is the *open-class* counterpart to the rule detectors.
+The rules find only what someone wrote a rule for; their recall is unknown and
+demonstrably imperfect — the `BWK 12` → `L12` miss had no rule. A judge can flag
+errors nobody anticipated. `agreement_with_detectors()` reports the confusion
+between the two layers directly, and the `judge_only` cell **is** the recall gap.
+
+**How to read it — carefully.**
+
+- **Prompt sensitivity is severe.** Moving GEMBA from a bare prompt to a
+  rubric-style one moved correlation with human judgement from 0.09 to 0.35
+  ([RUBRIC-MQM, ACL 2025 Industry](https://aclanthology.org/2025.acl-industry.12/)).
+  This rubric is **unvalidated against clinicians**. Treat findings as candidates
+  for human review, not as ground truth.
+- **Unparseable replies are counted separately.** A model that returns prose
+  instead of JSON contributes zero findings; silently treating that as "clean"
+  would bias every system toward looking good, so `unparseable_replies` is
+  reported and a run with many of them is not a clean run.
+- **Self-preference is guarded in code.** `run_llm_judge` raises if the judge is
+  the system under test, matching on the leaf name so `z-ai/glm-5.2` is caught
+  when testing `glm-5.2`.
+
+## 6. What is deliberately *not* used
 
 **Reference-free quality estimation (COMET-Kiwi, XCOMET-QE) as a safety signal.**
 Documented as failing on exactly this task: Mehandru et al. (EMNLP 2023) ran a physician

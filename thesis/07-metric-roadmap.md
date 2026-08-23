@@ -127,6 +127,103 @@ used to validate every automatic metric above.**
 
 ---
 
+## Result — COMET disagrees with BLEU, and with the clinical layer
+
+Run 2026-08-22 over the existing single-pass PARROT outputs (296 reports, no
+retranslation), `Unbabel/wmt22-comet-da`, results in
+[`results/comet_parrot_de.json`](../results/comet_parrot_de.json).
+
+| System | COMET | BLEU | crit% |
+|---|---|---|---|
+| hymt2-30b-a3b | **0.8284** | 47.71 | 31.1 |
+| hymt2-7b | 0.8239 | 45.99 | 24.3 |
+| MiniMax-M3 ☁ | 0.8207 | 53.49 | 21.3 |
+| DeepSeek-V4-Flash ☁ | 0.8186 | **53.75** | 19.9 |
+| glm-5.2 ☁ | 0.8152 | 51.34 | **19.3** |
+| translategemma-4b | 0.8145 | 44.68 | 23.0 |
+| hymt2-1.8b | 0.8067 | 39.11 | 25.3 |
+| qwen35-4b | 0.7937 | 47.95 | 24.7 |
+| qwen35-27b | 0.7894 | 51.74 | 28.4 |
+| nllb | 0.7039 | 21.76 | 33.4 |
+| opus | 0.6704 | 24.62 | 26.7 |
+| *identity (control)* | *0.6099* | *3.25* | *95.9* |
+
+**Three metrics, three different orderings.** BLEU and COMET do not agree
+(`by_bleu == by_comet` is `False`), and neither agrees with the clinical layer:
+
+| | 1st | 2nd | 3rd |
+|---|---|---|---|
+| BLEU | DeepSeek-V4-Flash | MiniMax-M3 | qwen35-27b |
+| COMET | **hymt2-30b-a3b** | hymt2-7b | MiniMax-M3 |
+| crit% | glm-5.2 | DeepSeek-V4-Flash | MiniMax-M3 |
+
+The sharpest case is `hymt2-30b-a3b`: **first on COMET, sixth on BLEU, and
+second-worst of eleven real systems on clinical errors (31.1%).** The metric
+built to capture semantic adequacy ranks first the system that damages clinical
+content nearly most. `qwen35-27b` is the mirror image — third on BLEU, ninth on
+COMET.
+
+This settles the question the run was designed to ask. The divergence between
+surface quality and clinical safety is **not an artefact of n-gram matching**: a
+learned semantic metric trained on human adequacy judgements produces a third
+ordering, and still does not track clinical risk. The clinical layer is measuring
+something neither surface nor learned semantic metrics capture.
+
+Two caveats that bound the claim:
+
+- **COMET is off-distribution here.** It is trained on WMT news-domain human
+  judgements and is documented to degrade outside that
+  ([arXiv:2402.18747](https://arxiv.org/abs/2402.18747)). Its ordering is
+  evidence of disagreement, not adjudication of who is right.
+- **The control behaves correctly**, which is what makes the rest readable:
+  `identity` scores 0.6099, far below every real system. COMET's scale is
+  compressed — 0.67 to 0.83 spans the entire real field — so small COMET
+  differences should not be over-read.
+
+### Environment note: COMET cannot share this project's transformers
+
+`unbabel-comet` 2.2.7 requires `transformers` 4.x — installing it silently
+downgraded the shared venv from 5.15.1 to 4.57.6, which broke `Qwen3.5` loading
+everywhere (`model type 'qwen3_5' not recognized`) and failed a cascade job that
+had nothing to do with COMET. Upgrading back breaks COMET in turn: its XLM-R
+encoder unpacks a three-tuple that transformers 5.x no longer returns
+(`not enough values to unpack (expected 3, got 2)`).
+
+They are mutually exclusive in one environment. COMET therefore lives in its own
+`.venv-comet`; the main venv stays on transformers 5.x for the translation
+models.
+
+## TODO — benchmark DeepL
+
+**DeepL is the obvious commercial baseline for DE↔EN and it is not yet in the
+benchmark.** An adapter already exists (`src/medmt_eval/models/deepl_mt.py`,
+adapter name `deepl`, free-tier aware) and is wired into the factory; it has
+never been run against PARROT.
+
+This matters more than an extra row in the table. Every claim in this thesis is
+relative to open models and one hosted gateway. DeepL is what a German hospital
+would actually reach for, so "is a specialised model needed?" is not answered
+without it.
+
+Two things to get right when it runs:
+
+- **It is the reference commercial system, and it is also upstream of one of the
+  candidate dictionaries.** German MeSH is a DeepL first pass
+  ([08-terminology.md](08-terminology.md)), so any evaluation that scores DeepL
+  against German MeSH terminology is scoring it against its own output. Keep the
+  two apart: benchmark DeepL on PARROT with the human references, never against
+  an MT-derived term bank.
+- **Glossary support is a first-class feature of the API**, which makes DeepL the
+  natural second arm for Experiment 1 — its glossary is applied inside the
+  translation engine rather than injected as a prompt, so it tests whether the
+  null result in [09](09-experiments-glossary-debate.md) is about dictionaries in
+  general or about *prompt-injected* dictionaries specifically. That is the
+  single most informative follow-up available.
+
+Needs: an API key (free tier is 500k chars/month; PARROT-DE is ~229k characters,
+so the full corpus fits), and `DEEPL_API_KEY` exported at submission. Both the
+single-pass benchmark and the ten-cycle round-trip should be run.
+
 ## Order of adoption
 
 1. **COMET-22 + COMET-Kiwi over the existing outputs.** Cheapest, no new translations

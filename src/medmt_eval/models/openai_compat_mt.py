@@ -79,6 +79,15 @@ _BACKOFF_CAP = 60.0
 # report per call generates a fraction of the tokens a full batch does.
 _NO_FANOUT_STATUS = frozenset({429})
 
+#: Connection-level failures worth retrying. These surface as exceptions rather
+#: than HTTP statuses; a single dropped TLS handshake used to abort a whole run.
+_TRANSPORT_ERRORS = (
+    _requests.exceptions.SSLError,
+    _requests.exceptions.ConnectionError,
+    _requests.exceptions.Timeout,
+    _requests.exceptions.ChunkedEncodingError,
+)
+
 _SINGLE_TEMPLATE = (
     "Translate the following medical text from {source_lang} to {target_lang}. "
     "Return only the translation, with no explanation, no preamble, and no quotation marks.\n\n"
@@ -182,10 +191,27 @@ class OpenAICompatTranslator(Translator):
             self._resolved_key = _get_api_key()
         return self._resolved_key
 
+    def chat(self, user: str, system: str | None = None) -> str:
+        """One chat turn, optionally with a system message.
+
+        Exposed so that experiments needing arbitrary prompts — glossary
+        injection, multi-agent debate — reuse this class's retry/backoff and,
+        critically, its served-model guard, instead of re-implementing the HTTP
+        call and losing the substitution check.
+        """
+        messages: list[dict[str, str]] = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": user})
+        return strip_thinking(self._complete_messages(messages))
+
     def _complete(self, prompt: str) -> str:
+        return self._complete_messages([{"role": "user", "content": prompt}])
+
+    def _complete_messages(self, messages: list[dict[str, str]]) -> str:
         payload: dict[str, Any] = {
             "model": self.model_id,
-            "messages": [{"role": "user", "content": prompt}],
+            "messages": messages,
             "temperature": self._temperature,
         }
         if self._config.max_new_tokens:
@@ -197,9 +223,19 @@ class OpenAICompatTranslator(Translator):
             "Content-Type": "application/json",
         }
         for attempt in range(_MAX_RETRIES + 1):
-            response = _requests.post(
-                self.base_url, headers=headers, json=payload, timeout=self._timeout
-            )
+            try:
+                response = _requests.post(
+                    self.base_url, headers=headers, json=payload, timeout=self._timeout
+                )
+            except _TRANSPORT_ERRORS:
+                # A dropped TLS connection or a read timeout arrives as an
+                # exception, not a status code, so the status-based branch below
+                # never sees it. Left unhandled these kill an otherwise healthy
+                # multi-hour run on one flaky connection.
+                if attempt == _MAX_RETRIES:
+                    raise
+                _time.sleep(min(_BACKOFF_BASE**attempt, _BACKOFF_CAP) * (0.5 + _random.random()))
+                continue
             if response.status_code not in _RETRY_STATUS or attempt == _MAX_RETRIES:
                 break
             _time.sleep(self._retry_delay(response, attempt))

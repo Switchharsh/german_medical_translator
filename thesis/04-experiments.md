@@ -12,6 +12,21 @@ stratified PARROT-DE subsample. Results in
 **Turkish** — the same pipeline on the 48 TR→EN PARROT pairs. Reported as a limitation
 only; see [01-dataset.md](01-dataset.md).
 
+**Dictionary injection** — three arms (`none` / `glossary` / `distractor`) on 40
+PARROT-DE reports, run twice: once on a 2,834-entry Wikidata bank (3.0 terms per
+document) and once on a 47,997-entry RadLex+Wikidata bank (13.6 terms per
+document). See [09](09-experiments-glossary-debate.md).
+
+**Multi-agent debate** — three local instruction-following models with distinct
+personas and disjoint glossary slices, two rounds plus synthesis, 20 reports.
+
+**Review cascade** — an asymmetric pipeline (MT drafts → terminologist with the
+glossary corrects → radiologist without the glossary arbitrates), every stage
+scored separately, 40 reports.
+
+**COMET** — `Unbabel/wmt22-comet-da` over all thirteen systems' existing
+single-pass outputs. No retranslation. See [07](07-metric-roadmap.md).
+
 ## Hardware and cost
 
 SLURM, mixed A100 partition. The nodes are **not** uniform: 19 carry the `a100_40`
@@ -82,10 +97,78 @@ SLURM script, which does not resolve as expected under SLURM. Correcting it to a
 paths killed two running jobs (3942019, 3942020). The check performed before editing
 looked for writers in `results/` but not in `scripts/`.
 
+**Compute nodes have no outbound network (job 4077499).** COMET's checkpoint
+fetch works interactively and fails inside a job — and COMET swallows the real
+error, re-raising it as `Model 'Unbabel/wmt22-comet-da' not supported by COMET`,
+which points at the checkpoint name rather than at the network. Fixed by
+pre-fetching on the login node and loading from a local `.ckpt` path, with a
+preflight that fails at submission if the cache is empty.
+
+**Installing a metric broke the models (job 4077516).** `unbabel-comet` 2.2.7
+requires `transformers` 4.x, so installing it silently downgraded the shared venv
+from 5.15.1 to 4.57.6. That broke `Qwen3.5` loading everywhere
+(`model type 'qwen3_5' not recognized`) and killed a cascade job that had nothing
+to do with COMET. Upgrading back breaks COMET instead — its XLM-R encoder unpacks
+a three-tuple that transformers 5.x no longer returns. They are mutually
+exclusive; COMET now lives in `.venv-comet`.
+
+This one is worth dwelling on because the misdiagnosis was instructive. The
+symptom was a model failing *only* in the cascade, where Hy-MT2 loads before
+Qwen, and not in the debate, where Qwen loads first. That is a perfectly coherent
+load-order hypothesis, and it was wrong. What settled it was the dist-info
+timestamp on `transformers-4.57.6` matching the COMET install to the minute — a
+fact about the environment, not about the code.
+
+**Tokenizer output the model rejects (job 4077495).** `Hy-MT2-7B`'s tokenizer
+returns `token_type_ids`; its `generate()` refuses them
+(`model_kwargs are not used by the model`). Qwen's and Gemma's tokenizers do not
+return the field, so this is per-model and cannot be assumed away. Fixed by
+filtering the encoding against the model's actual `forward` signature rather than
+a hardcoded deny-list, so the next tokenizer with an extra field does not break
+the same way.
+
+**A translation-only model cannot join a debate (job 4077236).**
+`translategemma-4b-it`'s chat template requires each message's content to be a
+structured mapping carrying `source_lang_code`/`target_lang_code`. It can express
+"translate this" and nothing else — no persona, no critique. The job died twelve
+minutes in, after loading three models, on a Jinja `TemplateError`. Fixed with a
+tokenizer-only capability probe that runs in the preflight, before any weights
+load.
+
+**The hosted gateway degraded mid-project.** Between the round-trip runs and the
+experiments, `glm-5.2` and `MiniMax-M3` were withdrawn entirely, and of what
+remained only `DeepSeek-V4-Flash` still routed honestly — `Qwen3.8-27B` was
+served as `meta/muse-glimmer-30b`, `Qwen3.8-35B-A3B` as
+`nvidia/nemotron-3.5-lightning-30b-a3b`, `Kimi-K2.6` as
+`thinkingmachines/inkling`. The substitution guard caught every case. This is why
+the debate and cascade experiments default to local models: a participant that
+cannot be named is not reproducible.
+
+**A parser turned commentary into a finding (job 4077545).** The cascade's
+terminologist stage appeared to destroy translation quality — BLEU −17.9,
+critical errors +22.5. It had not. A 4B model asked for a two-field structured
+reply wrote its `ISSUES:` list and never reached `TRANSLATION:` (1 reply in 40
+contained the marker), and the parser's fallback returned the whole reply as the
+translation on 17 of 40 documents.
+
+Three properties of this failure make it worth recording. It produced a
+*plausible* result — one that confirmed an existing finding, which is exactly
+when a result gets least scrutiny. The evidence was already in hand: mean output
+length jumped from 769 to 3,446 characters. And the guard that would have caught
+it had been written into a different module an hour earlier and not carried
+across. The fix reorders the reply format so truncation costs the optional field,
+and reports `parse_failures` per stage.
+
 ## Verification practices adopted
 
-- **Preflight everything.** Credentials, gated-repo access and API reachability are all
-  probed with a single cheap request before a long job is submitted.
+- **Preflight everything.** Credentials, gated-repo access, API reachability,
+  chat-template capability, glossary size and cached checkpoints are all probed
+  before a long job is submitted. Five separate failure classes in this project
+  presented as an opaque error minutes into a job and were each one cheap check
+  at submission time.
+- **Check the parse rate before reading any score** from a stage that asks a
+  model for structured output, and put the critical field first in the required
+  format so truncation damages the optional one.
 - **Never transcribe numbers.** Figures and published tables are generated
   programmatically from `roundtrip_steps.csv`. This was adopted after several
   intermediate values in a hand-written chart data block turned out to be wrong — they

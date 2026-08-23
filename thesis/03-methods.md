@@ -87,6 +87,50 @@ Consequence for reading the results: with n=20 the critical-error rate moves in 
 steps, and **nothing finer than 5 points is meaningful**. Differences of one step should
 not be interpreted.
 
+## Contamination discipline
+
+PARROT is simultaneously the only report-register parallel corpus available here
+**and** the evaluation set. That dual role constrains what may be built from it,
+and the constraint is easy to violate without noticing.
+
+**Mining a glossary from PARROT would invalidate every reference-based metric.**
+BLEU, chrF++, TER and COMET all score against the same English translations the
+terms would be mined from, so injecting mined wording and then scoring against it
+measures leakage, not translation quality. Given that
+[Experiment 1](09-experiments-glossary-debate.md) found a BLEU *drop* caused by
+wording mismatch, mining would trivially reverse that finding while proving
+nothing. Splitting by document does not fix it either: the same radiologists
+wrote both halves, so house style leaks across the split.
+
+What survives such contamination is precisely the set of metrics that never touch
+the reference — the negation, laterality and number detectors, and the LLM judge.
+What does not survive is everything reference-based, plus the terminology
+detector if it shares a bank with the injected glossary.
+
+The rule adopted here: **terminology comes from sources external to the
+evaluation corpus** (RadLex, Wikidata), and the corpus is used to *measure*
+terminology, never to *generate* it.
+
+Two places where that line was approached and should be stated plainly:
+
+- **Branch selection.** RadLex branches were first filtered by a ≥70% measured
+  agreement threshold — a threshold computed on the evaluation set, and one that
+  falls exactly where a branch changes sides between corpus halves. The selection
+  was redone on a priori grounds (findings and procedures carry clinical meaning;
+  report components and descriptors are not terminology), with the measurement
+  reported as confirmation rather than as the criterion. See
+  [08-terminology.md](08-terminology.md).
+- **Section patterns.** The header patterns in
+  [`data/sections.py`](../src/medmt_eval/data/sections.py) were written by
+  inspecting PARROT's headers. This is much weaker than lexical leakage —
+  structure, not wording, and the extracted text is unchanged — but it is the
+  same family and is disclosed for the same reason.
+
+The structural fix for both is a **second German report corpus**: one to develop
+against, one held for evaluation. Nothing else makes corpus-derived register
+testable. Failing that, a frozen held-out slice of PARROT that no glossary or
+section work ever touches is the minimum defensible arrangement.
+
 ## Statistical treatment
 
 Corpus-level surface scores use sacreBLEU's corpus scorers, not the mean of

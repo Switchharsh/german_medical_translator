@@ -22,9 +22,11 @@ pass differ by a factor of 2.4 in how much they lose.
 ```
 src/medmt_eval/        the package
 ├── data/                  corpus converters (HimL SGML, EMEA TMX, PARROT JSONL)
+├── glossary/              injectable bilingual terminology (provenance-tracked)
 ├── models/                translation adapters, one per model family
+├── inference/             roundtrip, glossary injection, multi-agent debate
 ├── taxonomy/clinical.py   the clinical-loss detectors
-├── metrics/               surface (sacreBLEU) and optional neural (COMET)
+├── metrics/               surface (sacreBLEU), COMET, LLM clinical judge
 ├── stats/                 paired bootstrap, McNemar
 └── report/                leaderboard aggregation and plots
 
@@ -34,7 +36,7 @@ datasets/              raw downloads (gitignored)
 results/               run outputs (gitignored)
 figures/               publication PNGs (scripts/make_figures.py)
 thesis/                the write-up — start at thesis/00-overview.md
-tests/                 141 tests, no GPU or network needed
+tests/                 211 tests, no GPU or network needed
 ```
 
 ## Install
@@ -115,6 +117,87 @@ Three findings:
 
 Full tables, all five figures and interpretation: **[`thesis/05-results.md`](thesis/05-results.md)**.
 
+## Experiments: dictionary injection and multi-agent debate
+
+Two interventions on top of the benchmark, both aimed at the clinical layer.
+
+**Experiment 1 — does a dictionary help?** Three arms over one model and one
+prompt template: no glossary, the terms that occur in *this* document, and an
+equally long block of terms that do *not*. The third arm is the control — a
+glossary block lengthens and restructures the prompt, so only
+glossary-vs-distractor isolates the terms themselves.
+
+```bash
+BACKEND=local:Qwen/Qwen3.5-4B sbatch scripts/experiments/glossary.slurm
+```
+
+**Experiment 2 — three specialists argue.** Three agents with different personas
+and disjoint glossary slices, mapped one-to-one onto the critical detectors
+(`anatomist` → laterality, `safety` → negation/numbers, `linguist` → terminology).
+They propose independently, then revise while seeing each other's work, then a
+synthesis step signs off. Every agent's solo proposal is scored alongside the
+debate output, so a debate that lands below its own best participant is visible.
+
+```bash
+sbatch scripts/experiments/debate.slurm
+```
+
+**Experiment 3 — a review cascade.** Asymmetric, unlike the debate: an MT model
+drafts, a terminologist model *with the RadLex glossary* corrects what it thinks
+is wrong, and a German-radiologist model *without* the glossary arbitrates the
+disagreement. Every stage is scored separately, so each is credited only with
+what it changed — and a stage that makes things worse is visible rather than
+averaged away.
+
+```bash
+sbatch scripts/experiments/cascade.slurm
+```
+
+Design, controls and the consensus-is-not-correctness caveat:
+**[`thesis/09-experiments-glossary-debate.md`](thesis/09-experiments-glossary-debate.md)**.
+
+## Better metrics
+
+Two instruments from [`thesis/07-metric-roadmap.md`](thesis/07-metric-roadmap.md)
+are now implemented.
+
+**COMET** — a learned semantic metric, so paraphrase stops being punished harder
+than a negation flip. Runs over outputs already on disk; no retranslation.
+
+```bash
+sbatch scripts/experiments/comet.slurm
+```
+
+**LLM-as-judge with a clinical rubric** — the open-class counterpart to the rule
+detectors. Categories are clinical (negation, laterality, measurement, anatomy,
+finding, certainty, terminology, omission) rather than MQM-generic, severity is
+defined by effect on patient management, and it scores against the *source*, never
+a reference. It refuses to grade a model against itself.
+
+```bash
+medmt-eval judge --input results/.../rt_qwen35-27b.jsonl \
+  --judge api:DeepSeek-V4-Flash --system-under-test qwen35-27b \
+  --output results/judged.jsonl
+```
+
+`agreement_with_detectors()` reports the confusion between the two layers —
+documents the judge flags and the rules miss are the recall gap, and that is
+where the `BWK 12` → `L12` class of error lives.
+
+## Terminology
+
+The glossary is built from Wikidata (MeSH/UMLS-anchored, CC0, no registration),
+filtered to MeSH branches A/C/E and put through three hygiene passes — without
+them, `Cm` (curium) matches **cm**, `CT` resolves to *circuit training*, and the
+most-matched term in the whole corpus is **indium**.
+
+```bash
+python3 scripts/build_glossary_wikidata.py -o data/term_banks/wikidata_med.csv
+```
+
+Which source to use, what was rejected and why, and why German MeSH is excluded
+on circularity grounds: **[`thesis/08-terminology.md`](thesis/08-terminology.md)**.
+
 ## Documentation
 
 | Document | Contents |
@@ -122,6 +205,8 @@ Full tables, all five figures and interpretation: **[`thesis/05-results.md`](the
 | **[`thesis/`](thesis/)** | The write-up — dataset, models, methods, experiments, results |
 | [`thesis/06-metrics.md`](thesis/06-metrics.md) | **Every metric: how it is computed, how to read it, why it is here** |
 | [`thesis/07-metric-roadmap.md`](thesis/07-metric-roadmap.md) | COMET, XCOMET/MetricX, LLM-as-judge, MQM — assessed and prioritised |
+| [`thesis/08-terminology.md`](thesis/08-terminology.md) | Which dictionary, and the hygiene a general-purpose one needs |
+| [`thesis/09-experiments-glossary-debate.md`](thesis/09-experiments-glossary-debate.md) | Dictionary injection and multi-agent debate |
 | [`RESULTS_INFORMATION_LOSS.md`](RESULTS_INFORMATION_LOSS.md) | Original detailed results write-up |
 | [`TRANSLATION_EXAMPLES.md`](TRANSLATION_EXAMPLES.md) | 126 side-by-side translations |
 | [`figures/`](figures/) | Publication PNGs, regenerate with `scripts/make_figures.py` |

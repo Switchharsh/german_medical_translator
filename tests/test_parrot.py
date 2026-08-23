@@ -122,3 +122,48 @@ def test_duplicate_ids_are_rejected(tmp_path) -> None:
     path = _write(tmp_path, [_record(5), _record(5, report="Anderer Befund.")])
     with pytest.raises(ValueError, match="duplicate segment IDs"):
         parrot_segments(path)
+
+
+def test_sections_strict_drops_reports_without_alignable_headers(tmp_path) -> None:
+    """Only 109 of 296 German PARROT reports carry a findings/impression header
+    on both sides, so strict mode changes the corpus, not just the text."""
+    import json
+
+    from medmt_eval.data.parrot import parrot_rows
+
+    src = tmp_path / "p.jsonl"
+    src.write_text("\n".join(json.dumps(r) for r in [
+        {"no": "1", "language": "German", "modality": "CT", "area": "chest",
+         "report": "Befund: Kein Erguss.", "translation": "Findings: No effusion."},
+        {"no": "2", "language": "German", "modality": "CT", "area": "chest",
+         "report": "Freitext ohne Kopfzeile.", "translation": "Free text, no header."},
+    ]), encoding="utf-8")
+
+    lenient = parrot_rows(src, sections=("findings", "impression"))
+    strict = parrot_rows(src, sections=("findings", "impression"), sections_mode="strict")
+    assert len(lenient) == 2 and len(strict) == 1
+    assert strict[0]["id"] == "parrot-1"
+
+
+def test_sectioned_flag_marks_which_reports_were_reduced(tmp_path) -> None:
+    """A reduced report and a whole one are not comparable, so the distinction
+    must survive into the output."""
+    import json
+
+    from medmt_eval.data.parrot import parrot_rows
+
+    src = tmp_path / "p.jsonl"
+    src.write_text("\n".join(json.dumps(r) for r in [
+        {"no": "1", "language": "German", "modality": "CT", "area": "chest",
+         "report": "Technik: 3 mm.\nBefund: Kein Erguss.",
+         "translation": "Technique: 3 mm.\nFindings: No effusion."},
+        {"no": "2", "language": "German", "modality": "CT", "area": "chest",
+         "report": "Freitext.", "translation": "Free text."},
+    ]), encoding="utf-8")
+
+    rows = parrot_rows(src, sections=("findings", "impression"))
+    by_id = {r["id"]: r for r in rows}
+    assert by_id["parrot-1"]["metadata"]["sectioned"] is True
+    assert by_id["parrot-2"]["metadata"]["sectioned"] is False
+    assert "3 mm" not in by_id["parrot-1"]["src_text"]
+    assert "Freitext" in by_id["parrot-2"]["src_text"]

@@ -27,3 +27,7 @@ huggingface/
 .vscode/
 
 
+.venv-comet/*
+
+datasets/*
+

@@ -111,6 +111,8 @@ def parrot_segments(
     src_lang: str = "de",
     tgt_lang: str = "en",
     language_aliases: set[str] | None = None,
+    sections: tuple[str, ...] | None = None,
+    sections_mode: str = "lenient",
 ) -> list[Segment]:
     """Build Segments from PARROT for a ``<report language>``/``en`` pair.
 
@@ -140,6 +142,7 @@ def parrot_segments(
 
     records = load_parrot_records(path, language_aliases=language_aliases)
     segments: list[Segment] = []
+    skipped_no_sections = 0
     for row in records:
         report = str(row.get("report") or "").strip()
         translation = str(row.get("translation") or "").strip()
@@ -147,6 +150,24 @@ def parrot_segments(
         report_is_source = src_lang != "en"
         source_text = report if report_is_source else translation
         reference_text = translation if report_is_source else report
+
+        # Optionally reduce each side to its medical sections. Only 109 of the
+        # 296 German reports carry a findings/impression header on BOTH sides, so
+        # what happens to the rest is a decision the caller has to make rather
+        # than something to paper over — hence `sections_mode`.
+        sectioned = False
+        if sections:
+            from medmt_eval.data.sections import extract_parallel
+
+            pair_text = extract_parallel(
+                source_text, reference_text, src_lang, tgt_lang, roles=sections
+            )
+            if pair_text is not None:
+                source_text, reference_text = pair_text
+                sectioned = True
+            elif sections_mode == "strict":
+                skipped_no_sections += 1
+                continue
 
         modality = str(row.get("modality") or "unspecified").strip() or "unspecified"
         area = normalise_area(row.get("area"))
@@ -170,8 +191,19 @@ def parrot_segments(
                     "subspecialty": str(row.get("subspecialty") or ""),
                     "contributor_code": str(row.get("contributor_code") or ""),
                     "country": str(row.get("country") or ""),
+                    # Downstream code must be able to separate documents that
+                    # were reduced to medical text from those left whole; the
+                    # two are not comparable.
+                    "sections": ",".join(sections) if sections else "",
+                    "sectioned": sectioned,
                 },
             )
+        )
+
+    if sections and sections_mode == "strict" and skipped_no_sections:
+        print(
+            f"parrot: dropped {skipped_no_sections} report(s) with no "
+            f"{'/'.join(sections)} section on both sides (strict mode)."
         )
 
     ids = [segment.id for segment in segments]
@@ -186,6 +218,8 @@ def parrot_rows(
     src_lang: str = "de",
     tgt_lang: str = "en",
     language_aliases: set[str] | None = None,
+    sections: tuple[str, ...] | None = None,
+    sections_mode: str = "lenient",
 ) -> list[dict[str, Any]]:
     """Return PARROT segments as plain dicts ready for JSONL serialisation."""
     return [
@@ -195,5 +229,7 @@ def parrot_rows(
             src_lang=src_lang,
             tgt_lang=tgt_lang,
             language_aliases=language_aliases,
+            sections=sections,
+            sections_mode=sections_mode,
         )
     ]

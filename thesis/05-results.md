@@ -48,6 +48,12 @@ The mechanism is visible in a single constructed example
 costs only 15 BLEU points, while an entirely harmless paraphrase costs 47. The metric is
 working exactly as designed; the design is wrong for this question.
 
+**This is not an artefact of n-gram matching.** COMET — a learned metric trained
+on human adequacy judgements, which does not penalise paraphrase — produces a
+*third* ordering, agreeing with neither BLEU nor the clinical layer, and ranks
+`hymt2-30b-a3b` first while that system sits second-worst of eleven on clinical
+errors. Full table in [07-metric-roadmap.md](07-metric-roadmap.md).
+
 ## Finding 2 — degradation is front-loaded and converges
 
 ![Round-trip curves](../figures/fig1_roundtrip_curves.png)
@@ -144,6 +150,21 @@ Three things point that way.
    `BWK 12` → `L12` miss), and a documented bias toward rewarding under-translation.
    Fine-tuning against an instrument with these properties risks optimising the
    instrument rather than the translation.
+4. **Three interventions that should have helped did not.** Injecting a
+   dictionary, injecting a 16× larger dictionary, and running a three-model
+   debate each moved the clinical error rate by zero or made it worse
+   ([09-experiments-glossary-debate.md](09-experiments-glossary-debate.md)).
+   Since every one of those is cheaper than fine-tuning and none of them worked,
+   there is no reason to expect the expensive intervention to succeed where they
+   failed — *unless* the reason they failed is that the instrument cannot see
+   their effect, which is exactly what needs establishing first.
+
+The failures also point somewhere specific. Across both experiments the surviving
+critical findings are overwhelmingly **numbers and measurements** — every one of
+the debate's eight failures, and 12 of 14 in the dictionary baseline. Terminology
+interventions cannot reach that category by construction. If a targeted fix
+exists, it is constrained decoding or a numeric post-check, not a glossary and not
+a committee.
 
 The honest next step is the metric work in
 [07-metric-roadmap.md](07-metric-roadmap.md) — a learned semantic metric, an open-class

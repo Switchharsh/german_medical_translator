@@ -21,9 +21,20 @@ class CometScorer:
     ``Unbabel/wmt22-cometkiwi-da`` (reference free, gated), and XCOMET checkpoints.
     """
 
-    def __init__(self, checkpoint: str, *, reference_free: bool = False) -> None:
+    def __init__(
+        self,
+        checkpoint: str,
+        *,
+        reference_free: bool = False,
+        local_files_only: bool = False,
+    ) -> None:
         self.checkpoint = checkpoint
         self.reference_free = reference_free
+        # Compute nodes on this cluster have no outbound network, so a fetch that
+        # works interactively fails inside a job — and COMET swallows the real
+        # error, re-raising it as the misleading "not supported by COMET"
+        # (job 4077499). Pre-fetch on the login node, then load offline.
+        self.local_files_only = local_files_only
         self._model = None
 
     def _load(self):
@@ -33,7 +44,24 @@ class CometScorer:
             from comet import download_model, load_from_checkpoint
         except ImportError as error:  # pragma: no cover - optional integration
             raise RuntimeError("COMET scoring requires `pip install -e '.[neural]'`.") from error
-        self._model = load_from_checkpoint(download_model(self.checkpoint))
+        from pathlib import Path
+
+        # An explicit .ckpt path skips the resolver entirely, which is the most
+        # robust option in an offline job.
+        if self.checkpoint.endswith(".ckpt") and Path(self.checkpoint).exists():
+            self._model = load_from_checkpoint(self.checkpoint)
+            return self._model
+        try:
+            path = download_model(self.checkpoint, local_files_only=self.local_files_only)
+        except (KeyError, Exception) as error:
+            raise RuntimeError(
+                f"Could not resolve COMET checkpoint {self.checkpoint!r}. On a "
+                f"compute node with no network, pre-fetch it on the login node "
+                f"(`python -c \"from comet import download_model; "
+                f"download_model('{self.checkpoint}')\"`) and pass the resulting "
+                f".ckpt path instead."
+            ) from error
+        self._model = load_from_checkpoint(path)
         return self._model
 
     def score(

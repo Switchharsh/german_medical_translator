@@ -319,3 +319,37 @@ def test_timed_out_batch_does_fan_out_into_single_requests(monkeypatch) -> None:
     translator = OpenAICompatTranslator(api_key="k", model_id="m")
     assert translator._translate_batch(["a", "b", "c"], "de", "en") == ["out"] * 3
     assert sum(1 for p in seen if "[[2]]" not in p) == 3  # one call per item
+
+
+def test_dropped_connection_is_retried(monkeypatch) -> None:
+    """An SSLError arrives as an exception, not a status, so the status-based
+    retry never saw it and one flaky handshake aborted the run."""
+    import requests
+    calls = []
+    monkeypatch.setattr("medmt_eval.models.openai_compat_mt._time.sleep", lambda _s: None)
+
+    def fake_post(*_a, **_k):
+        calls.append(1)
+        if len(calls) < 3:
+            raise requests.exceptions.SSLError("EOF in violation of protocol")
+        return _Resp(200)
+
+    monkeypatch.setattr("medmt_eval.models.openai_compat_mt._requests.post", fake_post)
+    assert OpenAICompatTranslator(api_key="k", model_id="m")._complete("hi") == "ok"
+    assert len(calls) == 3
+
+
+def test_persistent_connection_failure_finally_raises(monkeypatch) -> None:
+    import requests
+    monkeypatch.setattr("medmt_eval.models.openai_compat_mt._time.sleep", lambda _s: None)
+
+    def fake_post(*_a, **_k):
+        raise requests.exceptions.ConnectionError("refused")
+
+    monkeypatch.setattr("medmt_eval.models.openai_compat_mt._requests.post", fake_post)
+    try:
+        OpenAICompatTranslator(api_key="k", model_id="m")._complete("hi")
+    except requests.exceptions.ConnectionError:
+        pass
+    else:  # pragma: no cover
+        raise AssertionError("expected ConnectionError after retries are exhausted")

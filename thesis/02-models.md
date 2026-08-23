@@ -91,6 +91,25 @@ snapshots (`DeepSeek-V4-Flash` → `…-flash-0731`). Version-tag stripping is d
 narrow — digits only, optionally `v`-prefixed — so a differing *name* can never be
 excused as a differing version.
 
+## The gateway degraded mid-project
+
+The hosted models were verified honest at the time of the round-trip runs. They
+did not stay that way. Re-checked on 2026-08-21:
+
+| Requested | Served | Status |
+|---|---|---|
+| `DeepSeek-V4-Flash` | `deepseek-ai/deepseek-v4-flash-0731` | ✅ honest |
+| `glm-5.2` | — | ❌ withdrawn from the catalogue |
+| `MiniMax-M3` | — | ❌ withdrawn |
+| `Qwen3.8-27B` | `meta/muse-glimmer-30b` | ❌ substituted |
+| `Qwen3.8-35B-A3B` | `nvidia/nemotron-3.5-lightning-30b-a3b` | ❌ substituted |
+| `Kimi-K2.6` | `thinkingmachines/inkling` | ❌ substituted |
+
+Two of the three systems in the published benchmark can no longer be re-run at
+all. The guard caught every substitution, so no result was mislabelled — but this
+is a limit on reproducibility that no amount of care in this repository can fix,
+and it is the reason the later experiments default to local models.
+
 ## Decoding
 
 Greedy/beam settings are fixed across systems and persisted with every result

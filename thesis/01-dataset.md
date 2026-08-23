@@ -39,6 +39,76 @@ PARROT composition (German subset, 296 reports):
 Source length: mean 773 characters, median 588, max 4029. The long tail matters — it is
 what forces the chunking machinery described in [03-methods.md](03-methods.md).
 
+## Report structure — and the medical-text-only corpus
+
+PARROT stores each report as a **single free-text string**; there are no section
+tags. Sections appear as inline headers, and they are not tidy: 89 distinct
+line-initial headers across the 296 German reports.
+
+The regular ones are:
+
+| German header | reports |
+|---|---|
+| `Beurteilung` (impression) | 88 |
+| `Befund` (findings) | 83 |
+| `Klinik, Fragestellung, Rechtfertigende Indikation` | 68 |
+| `Technik` / `Untersuchungstechnik` | 52 |
+| `Fragestellung` | 36 |
+| `Befund und Beurteilung` (combined) | 19 |
+
+**Why this matters for the metrics.** The material before the findings —
+clinical question, justifying indication, acquisition protocol, consent — is
+about the *examination*, not the patient. It contributes numbers that are
+protocol parameters: slice thickness, T1/T2 weighting, kV, contrast volume. The
+number/measurement detector cannot tell those from a lesion diameter.
+
+[`data/sections.py`](../src/medmt_eval/data/sections.py) extracts sections by
+role, and the converter exposes it:
+
+```bash
+medmt-eval convert parrot --input … --sections findings impression \
+    --sections-mode strict     # 109 reports, medical text only
+```
+
+Two constraints, both measured rather than assumed:
+
+- **Only 109 of 296 reports (37%) carry a findings/impression header on *both*
+  sides.** A further 35 have one in the English translation only. Extraction is
+  impossible for the remaining 152, so `--sections-mode` makes the choice
+  explicit: `strict` drops them (109 reports), `lenient` keeps them whole and
+  flags `metadata.sectioned` so the two groups are never silently mixed.
+- **Headers do not map one-to-one across languages.** One report's German has
+  clinical-question, findings and impression sections while its English has only
+  findings and impression — the translator dropped a section. Roles are therefore
+  matched independently on each side, never by position or count.
+
+On the 109 extractable reports the source shrinks from a mean of 821 to 488
+characters — **40% of the text is not the medical content.**
+
+### What removing it actually changes
+
+Less than the character count suggests:
+
+| System | BLEU whole → medical | crit% whole → medical |
+|---|---|---|
+| DeepSeek-V4-Flash | 57.04 → 52.05 | 19.3% → 18.3% |
+| qwen35-27b | 59.26 → 56.05 | 18.8% → 18.8% |
+| hymt2-30b-a3b | 52.68 → 52.65 | 29.0% → 28.0% |
+
+BLEU falls a few points — boilerplate is formulaic and easy, so removing it
+removes cheap matches. The **critical-error rate moves by 0 to 1 point.**
+
+An earlier estimate put the preamble's share of critical findings at 30%, from
+locating each finding's evidence within the source. That estimate was based on 23
+findings from one system with 7 unlocated, and the corpus-scale effect is about a
+point. The direction was right; the magnitude was overstated by the small sample,
+and the corpus-scale number is the one to quote.
+
+So the medical-text corpus is worth having — it answers "can the medical content
+be translated" rather than "can the document be reproduced" — but it does not
+rescue the headline result. Systems still corrupt clinical content in 18–28% of
+reports when only findings and impressions are scored.
+
 ## Conversion notes
 
 - **Filter on `language`, not `country`.** The `country` field is dirty: it contains the
