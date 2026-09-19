@@ -15,7 +15,9 @@ looking at it: on German radiology reports the best-BLEU system
 under round-trip translation two systems that are indistinguishable on a single
 pass differ by a factor of 2.4 in how much they lose.
 
-**Start with [`thesis/00-overview.md`](thesis/00-overview.md).**
+**The full write-up is [`THESIS.md`](THESIS.md)** — one document, ~19,000 words.
+It is assembled from the chapters in [`thesis/`](thesis/) by
+`python3 scripts/build_thesis.py`; edit the chapters, then rebuild.
 
 ## Layout
 
@@ -35,7 +37,8 @@ data/derived/          converted corpora (gitignored, regenerate with `convert`)
 datasets/              raw downloads (gitignored)
 results/               run outputs (gitignored)
 figures/               publication PNGs (scripts/make_figures.py)
-thesis/                the write-up — start at thesis/00-overview.md
+THESIS.md              the write-up (generated)
+thesis/                its source chapters
 tests/                 211 tests, no GPU or network needed
 ```
 
@@ -202,7 +205,8 @@ on circularity grounds: **[`thesis/08-terminology.md`](thesis/08-terminology.md)
 
 | Document | Contents |
 |---|---|
-| **[`thesis/`](thesis/)** | The write-up — dataset, models, methods, experiments, results |
+| **[`THESIS.md`](THESIS.md)** | **The full write-up, single document** |
+| [`thesis/`](thesis/) | Its source chapters — edit these, then `scripts/build_thesis.py` |
 | [`thesis/06-metrics.md`](thesis/06-metrics.md) | **Every metric: how it is computed, how to read it, why it is here** |
 | [`thesis/07-metric-roadmap.md`](thesis/07-metric-roadmap.md) | COMET, XCOMET/MetricX, LLM-as-judge, MQM — assessed and prioritised |
 | [`thesis/08-terminology.md`](thesis/08-terminology.md) | Which dictionary, and the hygiene a general-purpose one needs |

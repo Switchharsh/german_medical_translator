@@ -76,7 +76,7 @@ truth, not a model agreeing with itself.
 
 Full numbers in [05-results.md](05-results.md).
 
-## Reading order
+## Chapter summaries
 
 | File | Contents |
 |---|---|
