@@ -34,6 +34,7 @@ extra time rather than silently misaligning the output.
 
 from __future__ import annotations
 
+import json
 import os
 import random as _random
 import re
@@ -218,6 +219,15 @@ class OpenAICompatTranslator(Translator):
             # Batches return several full reports, so scale the ceiling with the
             # batch size rather than using the per-segment value directly.
             payload["max_tokens"] = self._config.max_new_tokens * max(1, self._config.batch_size)
+        # Opt-in extras, unset for every existing run:
+        #   OPENAI_COMPAT_EXTRA_BODY        JSON merged into the request, e.g. GLM's
+        #                                   {"thinking": {"type": "disabled"}}.
+        #   OPENAI_COMPAT_TOKENS_PER_MIN    pace requests so OUTPUT tokens (reasoning included)
+        #                                   stay under a per-minute cap. The SCADS API meters output
+        #                                   tokens only: 3,000/min for GLM-5.3, 10,000/min for MiniMax-M3.
+        extra = os.environ.get("OPENAI_COMPAT_EXTRA_BODY")
+        if extra:
+            payload.update(json.loads(extra))
         headers = {
             "Authorization": f"Bearer {self._key()}",
             "Content-Type": "application/json",
@@ -242,9 +252,21 @@ class OpenAICompatTranslator(Translator):
         response.raise_for_status()
         data = response.json()
         self._check_served_model(data.get("model"))
+        per_min = float(os.environ.get("OPENAI_COMPAT_TOKENS_PER_MIN", "0") or 0)
+        if per_min:
+            used = (data.get("usage") or {}).get("completion_tokens") or 0
+            _time.sleep(used / per_min * 60.0)   # one in-flight request at a time (workers=1)
         # Reasoning models on this gateway return their chain of thought in a
         # separate `reasoning_content` field; only `content` is the answer.
-        return str(data["choices"][0]["message"]["content"])
+        choice = data["choices"][0]
+        content = choice["message"].get("content")
+        if content is None:
+            # A reasoning model that spends its whole max_tokens on hidden reasoning returns content=null with
+            # finish_reason="length". str(None) is the four-character text "None", which is not blank, so it
+            # passed the empty-answer check and was scored as a translation (GLM-5.3 EN->DE, 26 of 296 reports).
+            # Return nothing instead, so the caller sees an empty answer and can retry with a larger ceiling.
+            return ""
+        return str(content)
 
     @staticmethod
     def _retry_delay(response: Any, attempt: int) -> float:

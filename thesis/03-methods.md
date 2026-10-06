@@ -111,6 +111,19 @@ The rule adopted here: **terminology comes from sources external to the
 evaluation corpus** (RadLex, Wikidata), and the corpus is used to *measure*
 terminology, never to *generate* it.
 
+**One deliberate exception, run as an experiment.**
+[Experiment 4](09-experiments-glossary-debate.md#experiment-4--a-glossary-mined-from-the-corpus-itself)
+mines a glossary from PARROT on purpose, because Experiment 1's failure was
+traced to register — an ontology's preferred label is not the wording a
+radiologist writes — and the only available source of report register is the
+reports. It is run under the constraints this section implies rather than in
+spite of them: a document-level train/val split so no scored document
+contributed a term, the source-referenced detectors as the primary read, and
+every reference-based score labelled contaminated. What the split buys is
+narrower than it looks — it removes direct memorisation and leaves house-style
+leakage intact — so the experiment's reference-based numbers are reported as an
+upper bound that cannot be cleaned up, not as a result.
+
 Two places where that line was approached and should be stated plainly:
 
 - **Branch selection.** RadLex branches were first filtered by a ≥70% measured

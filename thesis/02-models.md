@@ -1,6 +1,6 @@
 # Systems under test
 
-Thirteen entries: twelve translation systems plus a control.
+Fourteen entries: thirteen translation systems plus a control.
 
 | Name | Model ID | Class | Params | Adapter |
 |---|---|---|---|---|
@@ -17,10 +17,12 @@ Thirteen entries: twelve translation systems plus a control.
 | `glm-5.2` | `z-ai/glm-5.2` | Hosted frontier LLM | — | `openai-compat` |
 | `DeepSeek-V4-Flash` | `deepseek-ai/deepseek-v4-flash-0731` | Hosted frontier LLM | — | `openai-compat` |
 | `MiniMax-M3` | `minimaxai/minimax-m3` | Hosted frontier LLM | — | `openai-compat` |
+| `deepl` | none disclosed | Commercial neural MT, free API plan | — | `deepl` |
 
 The set spans the four hypotheses worth testing: a small dedicated bilingual model, a
 massively multilingual one, purpose-built translation LLMs, and general-purpose LLMs
-prompted to translate — local and hosted.
+prompted to translate — local and hosted. DeepL, added last (2026-09-29), is the fifth: the
+commercial system a German hospital would actually reach for.
 
 ## The control
 
@@ -63,6 +65,38 @@ addressed the wrong cause.
 **MoE weight storage ≠ compute.** `Hy-MT2-30B-A3B` activates ~3 B parameters but must
 *hold* ~60 GB of weights, so it needs 2×80 GB despite being cheap to run. Sizing it by
 active parameters would have failed to load.
+
+## DeepL
+
+DeepL is the one system here with no model identifier. The service does not disclose
+which model answers, so nothing can be pinned and the result is a dated measurement
+(2026-09-29), not a reproducible artefact. Rerunning it next year may give different
+numbers.
+
+Four things the adapter
+([`models/deepl_mt.py`](../src/medmt_eval/models/deepl_mt.py)) has to get right, three
+of which it originally got wrong:
+
+- **Where it runs.** DeepL is reachable only over the internet, and the GPU nodes have no
+  outbound network, so it runs on the login node
+  ([`scripts/deepl/run_deepl.sh`](../scripts/deepl/run_deepl.sh)). The work is I/O-bound:
+  the whole 296-report benchmark took 254 s.
+- **The key variable.** The adapter read `DEEPL_AUTH_KEY`; the project's `.env` defines
+  `DEEPL_API_KEY`. The adapter would have refused to start with a valid key. It now
+  accepts either.
+- **The endpoint follows the key.** Free-plan keys end in `:fx` and are valid only on
+  `api-free.deepl.com`. The adapter previously chose the host from a flag, and a wrong
+  flag produces a 403 that reads like a bad key.
+- **The English target is pinned to `EN-US`.** Bare `EN` is deprecated. It currently
+  returns US spelling, checked directly and identical to `EN-US`, and PARROT's references
+  are US-spelled (78 US tokens, 0 UK). But what a deprecated alias means is DeepL's to
+  change.
+
+Failure handling follows the lesson of the hosted gateway: HTTP 429 and 5xx back off and
+retry; **456 (monthly quota exhausted) is fatal**, because retrying cannot help. The free
+plan allows 1,000,000 characters a month (read from `/v2/usage`; an earlier draft of the
+roadmap said 500,000). The run script refuses to start if the projected spend exceeds
+95% of what remains.
 
 ## Hosted models: the substitution guard
 

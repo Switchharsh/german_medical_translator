@@ -31,14 +31,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from medmt_eval.metrics.neural import CometScorer  # noqa: E402
 
 
-def load_system(path: Path) -> tuple[str, list[dict]]:
+def load_system(path: Path, strip: str = "parrot_de_") -> tuple[str, list[dict]]:
     seen: dict[str, dict] = {}
     for line in path.open(encoding="utf-8"):
         if not line.strip():
             continue
         row = json.loads(line)
         seen.setdefault(row["id"], row)
-    name = path.stem.split("parrot_de_")[-1]
+    name = path.stem.split(strip)[-1]
     return name, list(seen.values())
 
 
@@ -47,20 +47,24 @@ def main() -> int:
     parser.add_argument("run_dir", type=Path)
     parser.add_argument("-o", "--output", type=Path, default=Path("results/comet_scores.json"))
     parser.add_argument("--checkpoint", default="Unbabel/wmt22-comet-da")
+    parser.add_argument("--glob", default="parrot_de_*.jsonl", help="file pattern inside run_dir (EN->DE: parrot_en_de_*.jsonl)")
+    parser.add_argument("--strip", default="parrot_de_", help="file-name prefix removed to get the system code")
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--gpus", type=int, default=1)
     parser.add_argument("--local-files-only", action="store_true",
                         help="Never touch the network (required on compute nodes)")
     args = parser.parse_args()
 
-    files = sorted(args.run_dir.glob("parrot_de_*.jsonl"))
+    files = sorted(args.run_dir.glob(args.glob))
     if not files:
-        raise SystemExit(f"no parrot_de_*.jsonl in {args.run_dir}")
+        raise SystemExit(f"no {args.glob} in {args.run_dir}")
+    if args.output.exists():
+        raise SystemExit(f"refusing to overwrite {args.output}")
 
     scorer = CometScorer(args.checkpoint, local_files_only=args.local_files_only)
     results: dict[str, dict] = {}
     for path in files:
-        name, rows = load_system(path)
+        name, rows = load_system(path, args.strip)
         rows = [r for r in rows if r.get("ref_text") and r.get("hyp_text") is not None]
         if not rows:
             print(f"  {name}: no scorable rows, skipped")

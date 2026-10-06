@@ -1,0 +1,467 @@
+<title>Clinical MT Metrics</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:wght@500;600&display=swap">
+<style>
+:root{
+  color-scheme: light;
+  --bg:#fbfbfc; --surface:#ffffff; --sunken:#f4f6f8;
+  --ink:#14171a; --ink-2:#414a55; --muted:#5b6470; --line:#e3e6ea; --line-2:#eef1f4;
+  --surface-hue:#2a78d6; --clinical-hue:#c2551f; --semantic-hue:#159164;
+  --critical:#c3302f; --major:#95620a;
+  --fam:var(--line);
+  --serif:"IBM Plex Serif",Georgia,serif;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --bg:#101315; --surface:#171b1f; --sunken:#1d2228;
+    --ink:#f2f4f6; --ink-2:#c9d1d9; --muted:#98a3af; --line:#262c33; --line-2:#20252b;
+    --surface-hue:#5ea1ea; --clinical-hue:#f0885a; --semantic-hue:#3cc79a;
+    --critical:#ef6f6d; --major:#d9a521;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --bg:#101315; --surface:#171b1f; --sunken:#1d2228;
+  --ink:#f2f4f6; --ink-2:#c9d1d9; --muted:#98a3af; --line:#262c33; --line-2:#20252b;
+  --surface-hue:#5ea1ea; --clinical-hue:#f0885a; --semantic-hue:#3cc79a;
+  --critical:#ef6f6d; --major:#d9a521;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.6;margin:0}
+.wrap{max-width:1140px;margin:0 auto;padding-inline:20px;padding-block:0 72px}
+.prose{max-width:68ch}
+h1,h2,h3{font-family:var(--serif);text-wrap:balance;margin:0}
+h1{font-size:clamp(28px,4.4vw,42px);font-weight:600;letter-spacing:-.02em;line-height:1.12}
+h2{font-size:clamp(20px,2.6vw,26px);font-weight:600;letter-spacing:-.01em}
+h3{font-size:17px;font-weight:600}
+p{margin:0}
+a{color:var(--surface-hue)}
+code,.mono{font-family:var(--mono);font-size:.92em}
+.eyebrow{font-size:11.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+
+header.mast{border-bottom:1px solid var(--line);padding-block:44px 30px;margin-bottom:34px}
+header.mast .sub{color:var(--ink-2);margin-top:14px;font-size:16.5px}
+.meta{display:flex;flex-wrap:wrap;gap:8px 20px;margin-top:20px;font-size:12.5px;color:var(--muted);font-family:var(--mono)}
+
+nav.toc{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);
+  border-bottom:1px solid var(--line);margin-bottom:38px}
+nav.toc ul{display:flex;flex-wrap:wrap;gap:4px 18px;list-style:none;margin:0;padding:11px 0;font-size:13px}
+nav.toc a{color:var(--muted);text-decoration:none}
+nav.toc a:hover,nav.toc a:focus-visible{color:var(--ink)}
+
+section{margin-bottom:54px;scroll-margin-top:60px}
+section>h2{margin-bottom:6px}
+section>.lede{color:var(--ink-2);margin-bottom:22px;max-width:68ch}
+
+.tablebox{overflow-x:auto;border:1px solid var(--line);border-radius:8px;background:var(--surface);margin-top:16px}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{text-align:right;padding:9px 13px;white-space:nowrap;border-bottom:1px solid var(--line-2);
+  font-variant-numeric:tabular-nums}
+th{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);
+  background:var(--sunken);position:sticky;top:0}
+th:first-child,td:first-child{text-align:left;font-variant-numeric:normal}
+tbody tr:last-child td{border-bottom:none}
+tr.control td{color:var(--muted);font-style:italic}
+td.name{font-family:var(--mono);font-size:12.5px}
+.cloud{font-size:10px;color:var(--muted);border:1px solid var(--line);border-radius:3px;padding:0 4px;margin-left:5px}
+.best{font-weight:600;color:var(--ink)}
+.worst{color:var(--critical)}
+
+.card{background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--fam,var(--line));
+  border-radius:8px;padding:20px 22px;display:flex;flex-direction:column;gap:12px}
+.cards{display:grid;gap:16px}
+.card .top{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px 14px}
+.card .range{font-family:var(--mono);font-size:11.5px;color:var(--muted)}
+.fam-surface{--fam:var(--surface-hue)} .fam-clinical{--fam:var(--clinical-hue)} .fam-semantic{--fam:var(--semantic-hue)}
+.formula{background:var(--sunken);border-radius:6px;padding:13px 15px;font-family:var(--mono);
+  font-size:12.5px;line-height:1.75;overflow-x:auto;white-space:pre;color:var(--ink-2)}
+.note{font-size:13.5px;color:var(--ink-2)}
+.note b{color:var(--ink)}
+.chip{display:inline-block;font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;
+  padding:2px 7px;border-radius:3px;border:1px solid currentColor}
+.chip.crit{color:var(--critical)} .chip.maj{color:var(--major)}
+
+.rank{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;margin-top:18px}
+.rankcol{background:var(--surface);border:1px solid var(--line);border-top:3px solid var(--fam);border-radius:8px;padding:16px 18px}
+.rankcol h3{font-family:var(--sans);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--fam)}
+.rankcol ol{margin:12px 0 0;padding-left:20px;font-family:var(--mono);font-size:12.5px;line-height:2}
+.rankcol li::marker{color:var(--muted)}
+
+.callout{border:1px solid var(--line);border-left:3px solid var(--critical);background:var(--surface);
+  border-radius:8px;padding:18px 20px;margin-top:18px;font-size:14px;color:var(--ink-2)}
+.callout b{color:var(--ink)}
+footer{border-top:1px solid var(--line);padding-top:22px;font-size:12.5px;color:var(--muted)}
+footer p+p{margin-top:8px}
+@media (max-width:560px){ th,td{padding:8px 10px} body{font-size:14.5px} }
+</style>
+
+<div class="wrap">
+<header class="mast">
+  <div class="eyebrow">German&#8596;English radiology reports &middot; PARROT</div>
+  <h1>Clinical MT metrics, defined and measured</h1>
+  <p class="sub">Every metric this project computes &mdash; what it counts, how it is calculated, how to read it &mdash;
+  and every number it produced across fourteen systems. The three metric families rank the same systems in three different orders.</p>
+  <div class="meta">
+    <span>14 systems</span><span>296 reports (single pass)</span><span>20 passes &times; 20 reports (round trip)</span><span>sacreBLEU 2.6.0</span>
+  </div>
+</header>
+
+<nav class="toc"><ul>
+  <li><a href="#disagreement">The disagreement</a></li>
+  <li><a href="#worked">Worked example</a></li>
+  <li><a href="#reference">Metric reference</a></li>
+  <li><a href="#singlepass">Single-pass scores</a></li>
+  <li><a href="#roundtrip">Round-trip scores</a></li>
+  <li><a href="#interventions">Interventions</a></li>
+  <li><a href="#ceiling">The ceiling</a></li>
+  <li><a href="#reading">Reading notes</a></li>
+</ul></nav>
+
+<section id="disagreement">
+  <h2>Three families, three orderings</h2>
+  <p class="lede">Surface overlap, learned semantic adequacy and clinical fidelity are computed over the
+  same outputs. No two of them agree on which system is best.</p>
+  <div class="rank" id="rankings"></div>
+  <div class="callout"><b>hymt2-30b-a3b is first on COMET, sixth on BLEU among the eleven systems COMET scored, and
+  second-worst of twelve on clinical errors.</b> A learned metric trained on human adequacy judgements produces a third ordering and
+  still does not track clinical risk, so the divergence is not an artefact of n-gram matching.</div>
+</section>
+
+<section id="worked">
+  <h2>What the metrics do to one sentence</h2>
+  <p class="lede">The same reference, five candidate translations. Three of them would change patient
+  management; one is a harmless rewording.</p>
+  <div class="tablebox"><table id="worked-table"></table></div>
+  <div class="callout"><b>The harmless paraphrase scores worst on all three surface metrics.</b>
+  Dropping &ldquo;No&rdquo; from &ldquo;No pleural effusion&rdquo; costs 15.5 BLEU; saying the same true thing in
+  different words costs 47. COMET reproduces the blind spot rather than fixing it: it scores the dropped
+  negation 0.911 against 0.981 for the correct translation.</div>
+</section>
+
+<section id="reference">
+  <h2>Metric reference</h2>
+  <p class="lede">Colour marks the family: <span style="color:var(--surface-hue)">surface overlap</span>,
+  <span style="color:var(--semantic-hue)">learned semantic</span>,
+  <span style="color:var(--clinical-hue)">clinical fidelity</span>.</p>
+  <div class="cards" id="cards"></div>
+</section>
+
+<section id="singlepass">
+  <h2>Single-pass scores</h2>
+  <p class="lede">PARROT German radiology reports, 296 documents, scored per document. COMET is
+  <code>Unbabel/wmt22-comet-da</code> over the same outputs, for the twelve systems it was run on.</p>
+  <div class="tablebox"><table id="sp-table"></table></div>
+  <p class="note" style="margin-top:14px"><b>crit%</b> counts documents with any critical finding;
+  <b>words%</b> counts only negation and laterality findings and leaves out number and measurement findings, which
+  are two thirds of the critical findings on this corpus. Both come from one detector version, rescored on
+  2026-09-29, because the terminology detector changed after the July runs and mixing versions had made one system
+  look eight times better on terminology than it was.</p>
+  <p class="note" style="margin-top:8px"><b>DeepL</b> ran on the free API plan (EN-US target). It and <code>translategemma-27b</code> have no COMET score. DeepL writes <code>5-mm</code> for a compound modifier in 5 of 296 reports, and the number detector reads that as a mismatch against <code>5 mm</code>. Normalising the hyphen would clear 2 of its 76 critical documents (25.68% to 25.00%); the only other system affected is <code>hymt2-30b-a3b</code> (&minus;0.34 points). words% is not affected.</p>
+</section>
+
+<section id="roundtrip">
+  <h2>Round-trip scores</h2>
+  <p class="lede">Ten DE&rarr;EN&rarr;DE cycles, twenty translation passes, 20 reports. English steps are scored
+  against the human English reference and German steps against the original German; both anchors are fixed,
+  so cycle 1 equals the ordinary single-pass evaluation.</p>
+  <div class="tablebox"><table id="rt-table"></table></div>
+  <p class="note" style="margin-top:14px"><b>Front-loaded</b> is the share of the total BLEU loss that occurs
+  in the first round trip. It averages 77%: translation reaches a fixed point rather than decaying without bound.</p>
+</section>
+
+<section id="interventions">
+  <h2>Interventions</h2>
+  <p class="lede">Seven attempts to improve clinical fidelity. The <code>distractor</code> arm injects the same
+  number of terms that do <em>not</em> occur in the document, which is what separates &ldquo;the terms helped&rdquo;
+  from &ldquo;the block helped&rdquo;. <b>adopted</b> is the share of injected terms that appear in the output;
+  <b>orphan</b> is the share of <em>adopted</em> terms the human reference does not use.</p>
+  <div id="exp"></div>
+  <div class="callout"><b>Not one intervention produced a significant improvement in clinical error rate.</b>
+  Every McNemar test returned p &ge; 0.25. The single directional positive was the smallest, validated
+  glossary &mdash; 11.9% against a 12.8% control, three documents out of 109. The two mined banks show why the
+  terminology route is closed: the terms the models already get right are mined accurately, the terms with
+  headroom are mined badly, and against the distractor control the headroom bank is worth
+  <b>&minus;0.12 BLEU (p = 0.45)</b> &mdash; no signal at all.</div>
+</section>
+
+<section id="ceiling">
+  <h2>The ceiling on the clinical metric</h2>
+  <p class="lede">Before reading any intervention result, it is worth knowing how much of the critical-error
+  rate a terminology or committee method could reach even in principle. On the 100 held-out documents, most
+  of it is unreachable by construction.</p>
+  <div class="tablebox"><table id="ceil-table"></table></div>
+  <div class="callout" id="ceil-note"></div>
+
+  <h3 style="margin:30px 0 0">Why one reference is not enough</h3>
+  <p class="note" style="margin-top:8px;max-width:68ch">PARROT gives one English translation per report, and on
+  the vocabulary a glossary targets the corpus does not agree with itself. <code>Beurteilung</code> is a section
+  header, so its rendering can be counted exactly by aligning the <span class="mono">impression</span>-role
+  header on both sides. Every form below is what radiologists write &mdash; this project&rsquo;s own section
+  classifier treats them as one role.</p>
+  <div class="tablebox"><table id="var-table"></table></div>
+  <div class="callout"><b>A single-reference lexical metric cannot separate a wrong term from a correct synonym
+  the reference happens not to use</b> &mdash; and on high-frequency report vocabulary that is the common case,
+  not the edge case. This is a property of the corpus, not of any system measured against it.</div>
+</section>
+
+<section id="reading">
+  <h2>Reading notes</h2>
+  <div class="cards">
+    <div class="card"><h3>Metric signatures</h3>
+      <div class="formula" id="sigs"></div>
+      <p class="note">A BLEU number without a signature is not reproducible; different tokenisers move it by
+      several points. Corpus scores use sacreBLEU&rsquo;s corpus scorers, never the mean of sentence scores.</p></div>
+    <div class="card"><h3>Resolution</h3>
+      <p class="note">The critical-error rate is a share of <b>documents</b>, so its resolution is set by the
+      sample: <b>5 points at n=20</b>, 2.5 at n=40, roughly 0.9 at n=109. Differences of one step are not
+      interpretable. Treat BLEU differences under ~1 point as noise, and never compare BLEU across test sets.</p></div>
+    <div class="card"><h3>Two known biases</h3>
+      <p class="note"><b>Under-translation flatters the clinical metric.</b> A detector cannot flag a
+      measurement that was never emitted. <code>opus</code> posts the lowest single-pass error rate while its
+      output shrinks from 599 to 506 characters.<br><br>
+      <b>Detector recall is unmeasured.</b> Three systems rendered <code>BWK 12</code> (twelfth thoracic
+      vertebra) as <code>L12</code> (twelfth lumbar) and no detector fired. The true error rate is higher than
+      the reported one by an unknown margin.</p></div>
+  </div>
+</section>
+
+<footer>
+  <p>Generated from <code>results/roundtrip_20260814_132452/roundtrip_steps.csv</code>,
+  <code>results/parrot_de/consolidated/</code>, <code>results/comet_parrot_de.json</code>, <code>results/deepl_20260929_134803/</code> and the experiment
+  summaries. Every figure on this page is read from those files at render time rather than transcribed.</p>
+  <p>Full write-up: <code>THESIS.md</code>, chapter 7 (metrics) and chapter 11 (configurations).</p>
+</footer>
+</div>
+
+<script id="data" type="application/json">{"roundtrip":{"DeepSeek-V4-Flash":{"bleu":[58.45,55.14,55.25,54.75,54.3,54.32,54.3,54.11,54.1,54.07],"chrf":[77.8,75.69,75.67,75.47,75.07,75.01,74.96,74.86,75.02,74.89],"cen1":35,"cen":40,"cde1":35,"cde":35,"chars":[707,709,708,709,706,704,704,703,704,705]},"MiniMax-M3":{"bleu":[56.17,52.81,52.56,51.99,52.4,51.99,51.98,52.44,52.75,52.41],"chrf":[75.82,74.5,74.17,73.95,74.07,73.86,73.92,74.16,74.33,74.18],"cen1":30,"cen":40,"cde1":30,"cde":35,"chars":[705,710,707,710,710,710,711,710,711,710]},"glm-5.2":{"bleu":[55.07,52.5,50.34,49.92,49.78,49.69,49.3,49.08,49.73,49.4],"chrf":[75.39,73.79,73.17,72.68,72.58,72.56,72.45,72.48,72.42,72.55],"cen1":40,"cen":40,"cde1":30,"cde":30,"chars":[710,709,710,708,709,710,711,713,710,709]},"hymt2-1.8b":{"bleu":[41.15,33.84,33.12,32.95,32.57,32.76,32.56,32.75,32.55,32.65],"chrf":[65.39,60.61,60.01,59.92,59.8,59.83,59.77,59.86,59.76,59.81],"cen1":50,"cen":55,"cde1":65,"cde":65,"chars":[712,734,735,737,739,738,739,739,740,739]},"hymt2-30b-a3b":{"bleu":[50.08,35.75,35.21,34.78,33.72,33.63,33.69,33.62,33.7,33.54],"chrf":[72.9,65.57,64.58,63.97,63.48,63.4,63.49,63.39,63.49,63.3],"cen1":45,"cen":50,"cde1":40,"cde":45,"chars":[760,781,784,785,786,787,786,786,786,786]},"hymt2-7b":{"bleu":[45.39,36.79,36.3,35.98,35.75,35.75,35.79,35.79,35.79,35.79],"chrf":[69.65,63.87,62.99,62.7,62.66,62.69,62.71,62.71,62.71,62.71],"cen1":45,"cen":50,"cde1":45,"cde":50,"chars":[744,770,770,770,771,771,771,771,771,771]},"identity":{"bleu":[3.39,3.39,3.39,3.39,3.39,3.39,3.39,3.39,3.39,3.39],"chrf":[25.33,25.33,25.33,25.33,25.33,25.33,25.33,25.33,25.33,25.33],"cen1":95,"cen":95,"cde1":0,"cde":0,"chars":[691,691,691,691,691,691,691,691,691,691]},"nllb":{"bleu":[22.88,16.04,15.33,14.09,14.16,14.28,14.14,14.29,14.15,14.27],"chrf":[50.31,42.64,40.36,38.49,38.7,38.77,38.51,38.65,38.47,38.56],"cen1":35,"cen":50,"cde1":50,"cde":65,"chars":[565,616,736,880,729,724,735,731,722,719]},"opus":{"bleu":[28.88,25.77,24.78,24.18,24.3,24.3,24.18,24.15,24.15,24.15],"chrf":[54.69,51.06,49.81,49.32,49.35,49.21,49.17,49.12,49.12,49.12],"cen1":10,"cen":30,"cde1":30,"cde":35,"chars":[599,544,515,507,507,507,506,506,506,506]},"qwen35-27b":{"bleu":[57.61,54.53,52.8,52.62,52.92,52.58,52.87,52.58,52.87,52.58],"chrf":[77.96,75.71,74.67,74.59,74.68,74.55,74.65,74.55,74.65,74.55],"cen1":45,"cen":45,"cde1":45,"cde":45,"chars":[722,734,739,740,739,739,739,739,739,739]},"qwen35-4b":{"bleu":[56.3,49.04,49.35,48.47,48.52,47.77,48.52,47.77,48.52,47.77],"chrf":[75.82,71.63,71.45,71.29,71.16,70.9,71.16,70.9,71.16,70.9],"cen1":40,"cen":45,"cde1":55,"cde":55,"chars":[694,704,704,704,704,705,704,705,704,705]},"translategemma-27b":{"bleu":[57.14,47.64,45.69,44.96,44.91,44.89,44.91,44.89,44.91,44.89],"chrf":[77.93,72.43,71.19,71.07,70.85,70.84,70.85,70.84,70.85,70.84],"cen1":40,"cen":50,"cde1":45,"cde":45,"chars":[727,761,763,767,767,767,767,767,767,767]},"translategemma-4b":{"bleu":[47.9,35.4,34.02,32.77,32.24,32.22,32.22,32.2,32.18,32.18],"chrf":[69.53,61.64,60.49,59.84,59.33,59.31,59.3,59.26,59.25,59.24],"cen1":25,"cen":35,"cde1":40,"cde":45,"chars":[692,710,708,709,710,710,710,710,710,710]},"deepl":{"bleu":[52.73,45.97,44.56,44.01,43.49,43.05,43.46,42.16,41.8,41.95],"chrf":[72.93,69.61,68.53,68.43,67.97,67.75,67.94,67.45,67.23,67.34],"cen1":30,"cen":45,"cde1":35,"cde":45,"chars":[712,733,735,739,737,739,738,737,738,739]}},"singlepass":{"DeepSeek-V4-Flash":{"n":296,"crit":19.93,"bleu":53.75,"chrf":74.7,"ter":33.26,"words":4.05},"MiniMax-M3":{"n":296,"crit":21.28,"bleu":53.49,"chrf":74.8,"ter":33.46,"words":6.08},"glm-5.2":{"n":296,"crit":19.26,"bleu":51.34,"chrf":73.42,"ter":34.8,"words":4.73},"hymt2-1.8b":{"n":296,"crit":25.34,"bleu":39.11,"chrf":64.17,"ter":49.05,"words":7.43},"hymt2-30b-a3b":{"n":296,"crit":31.08,"bleu":47.71,"chrf":71.16,"ter":41.78,"words":9.8},"hymt2-7b":{"n":296,"crit":24.32,"bleu":45.99,"chrf":69.17,"ter":42.83,"words":8.11},"identity":{"n":296,"crit":95.95,"bleu":3.25,"chrf":25.63,"ter":94.25,"words":95.95},"nllb":{"n":296,"crit":33.45,"bleu":21.76,"chrf":46.59,"ter":64.96,"words":19.93},"opus":{"n":296,"crit":26.69,"bleu":24.62,"chrf":49.05,"ter":61.4,"words":20.61},"qwen35-27b":{"n":296,"crit":28.38,"bleu":51.74,"chrf":70.41,"ter":38.2,"words":13.85},"qwen35-4b":{"n":296,"crit":24.66,"bleu":47.95,"chrf":69.02,"ter":40.89,"words":11.82},"translategemma-4b":{"n":296,"crit":22.97,"bleu":44.68,"chrf":68.04,"ter":45.2,"words":6.08},"translategemma-27b":{"n":296,"crit":23.65,"bleu":55.02,"chrf":75.8,"ter":34.94,"words":6.42},"deepl":{"n":296,"crit":25.68,"bleu":52.74,"chrf":73.78,"ter":36.22,"words":6.76}},"comet":{"DeepSeek-V4-Flash":{"comet":0.8186168753214784,"n":296,"bleu":53.74973918911574,"critical_error_rate":0.19932432432432431},"MiniMax-M3":{"comet":0.8206510523686538,"n":296,"bleu":53.49153252725874,"critical_error_rate":0.21283783783783783},"glm-5.2":{"comet":0.8152466724450523,"n":296,"bleu":51.343217545742014,"critical_error_rate":0.19256756756756757},"hymt2-1.8b":{"comet":0.8066600500731855,"n":296,"bleu":39.109514049191276,"critical_error_rate":0.2533783783783784},"hymt2-30b-a3b":{"comet":0.8283590267638903,"n":296,"bleu":47.705478936950094,"critical_error_rate":0.3108108108108108},"hymt2-7b":{"comet":0.8238528056724651,"n":296,"bleu":45.985899371393195,"critical_error_rate":0.24324324324324326},"identity":{"comet":0.6099418711823386,"n":296,"bleu":3.247624371801443,"critical_error_rate":0.9594594594594594},"nllb":{"comet":0.7039487360901123,"n":296,"bleu":21.76462424544348,"critical_error_rate":0.3344594594594595},"opus":{"comet":0.6704434065802677,"n":296,"bleu":24.618226470125606,"critical_error_rate":0.2668918918918919},"qwen35-27b":{"comet":0.789425627202601,"n":296,"bleu":51.7414910410143,"critical_error_rate":0.28378378378378377},"qwen35-4b":{"comet":0.7936921193188912,"n":296,"bleu":47.952105107439664,"critical_error_rate":0.24662162162162163},"translategemma-4b":{"comet":0.8145058493356447,"n":296,"bleu":44.67552227833818,"critical_error_rate":0.22972972972972974}},"experiments":{"gloss_whole_wikidata":{"arms":[{"arm":"none","bleu":51.41046745353924,"chrf":72.69795055741933,"critical_error_rate":0.35,"finding_counts":{"laterality_missing_or_flipped":1,"negation_dropped":1,"number_or_measurement_mismatch":12},"mean_glossary_terms":0,"n":40,"ter":36.08788650116124},{"arm":"glossary","bleu":48.417272624778704,"chrf":70.76314821291069,"critical_error_rate":0.275,"finding_counts":{"laterality_missing_or_flipped":2,"negation_dropped":1,"number_or_measurement_mismatch":8},"mean_glossary_terms":3.025,"n":40,"ter":38.51664523202937},{"arm":"distractor","bleu":48.671633009977796,"chrf":70.91395336019686,"critical_error_rate":0.275,"finding_counts":{"laterality_missing_or_flipped":1,"negation_dropped":1,"number_or_measurement_mismatch":9},"mean_glossary_terms":3.025,"n":40,"ter":37.687814347271875}],"glossary_held_out":0,"glossary_injected":2834},"gloss_whole_radlex":{"arms":[{"arm":"none","bleu":51.41046745353924,"chrf":72.69795055741933,"critical_error_rate":0.35,"finding_counts":{"laterality_missing_or_flipped":1,"negation_dropped":1,"number_or_measurement_mismatch":12},"mean_glossary_terms":0,"n":40,"ter":36.08788650116124},{"arm":"glossary","bleu":43.00159951842677,"chrf":67.1825124462865,"critical_error_rate":0.325,"finding_counts":{"laterality_missing_or_flipped":1,"negation_dropped":1,"number_or_measurement_mismatch":11},"mean_glossary_terms":13.55,"n":40,"ter":43.10297115485085},{"arm":"distractor","bleu":47.01049162824276,"chrf":69.62298712837179,"critical_error_rate":0.25,"finding_counts":{"negation_dropped":1,"number_or_measurement_mismatch":9},"mean_glossary_terms":13.55,"n":40,"ter":38.926161022205704}],"glossary_held_out":0,"glossary_injected":45773},"gloss_med_merged":{"arms":[{"arm":"none","bleu":53.27794102050674,"chrf":72.59799704753647,"critical_error_rate":0.14678899082568808,"finding_counts":{"laterality_added_or_flipped":5,"laterality_missing_or_flipped":2,"negation_dropped":1,"negation_introduced":1,"number_or_measurement_mismatch":8,"terminology_not_preserved":3},"mean_glossary_terms":0,"n":109,"ter":37.02124263272871},{"arm":"glossary","bleu":48.4232309135453,"chrf":69.61952672438667,"critical_error_rate":0.13761467889908258,"finding_counts":{"laterality_added_or_flipped":4,"laterality_missing_or_flipped":1,"negation_dropped":1,"number_or_measurement_mismatch":9,"terminology_not_preserved":3},"mean_glossary_terms":11.486238532110091,"n":109,"ter":40.82736521285827},{"arm":"distractor","bleu":51.09397851072761,"chrf":71.29046602129804,"critical_error_rate":0.13761467889908258,"finding_counts":{"laterality_added_or_flipped":6,"laterality_missing_or_flipped":1,"negation_dropped":1,"number_or_measurement_mismatch":8,"terminology_not_preserved":3},"mean_glossary_terms":11.486238532110091,"n":109,"ter":38.28599625330508}],"glossary_held_out":0,"glossary_injected":45773},"gloss_med_findings":{"arms":[{"arm":"none","bleu":53.27794102050674,"chrf":72.59799704753647,"critical_error_rate":0.14678899082568808,"finding_counts":{"laterality_added_or_flipped":5,"laterality_missing_or_flipped":2,"negation_dropped":1,"negation_introduced":1,"number_or_measurement_mismatch":8,"terminology_not_preserved":3},"mean_glossary_terms":0,"n":109,"ter":37.02124263272871},{"arm":"glossary","bleu":50.46983941556011,"chrf":70.98646049483791,"critical_error_rate":0.11926605504587157,"finding_counts":{"laterality_added_or_flipped":4,"laterality_missing_or_flipped":1,"negation_dropped":1,"number_or_measurement_mismatch":7,"terminology_not_preserved":3},"mean_glossary_terms":1.5871559633027523,"n":109,"ter":38.638139316885436},{"arm":"distractor","bleu":50.919976527134374,"chrf":71.12711988784397,"critical_error_rate":0.12844036697247707,"finding_counts":{"laterality_added_or_flipped":4,"laterality_missing_or_flipped":1,"negation_dropped":1,"number_or_measurement_mismatch":8,"terminology_not_preserved":4},"mean_glossary_terms":1.5871559633027523,"n":109,"ter":38.335438902162714}],"glossary_held_out":0,"glossary_injected":2777},"debate_whole":{"variants":[{"bleu":51.61570472189287,"chrf":73.25767170644878,"critical_error_rate":0.4,"n":20,"ter":34.31442817354078,"variant":"debate"},{"bleu":50.58960522088196,"chrf":72.8023612832117,"critical_error_rate":0.4,"n":20,"ter":35.40587760206693,"variant":"solo:anatomist"},{"bleu":48.868551022410266,"chrf":70.47855311318803,"critical_error_rate":0.4,"n":20,"ter":37.865128957350656,"variant":"solo:safety"},{"bleu":46.606895839587246,"chrf":68.60874320439056,"critical_error_rate":0.4,"n":20,"ter":39.07359624007974,"variant":"solo:linguist"},{"converged_fraction":0.0,"mean_convergence_round":null,"mean_rounds_run":2,"n":20,"variant":"_meta"}]},"debate_med":{"variants":[{"bleu":49.134520079930155,"chrf":70.03864264189414,"critical_error_rate":0.175,"n":40,"ter":46.794889296173814,"variant":"debate"},{"bleu":49.32374358112466,"chrf":70.10583882743197,"critical_error_rate":0.175,"n":40,"ter":45.649029996447695,"variant":"solo:anatomist"},{"bleu":47.97134682969423,"chrf":69.44118273381748,"critical_error_rate":0.15,"n":40,"ter":47.48744594212397,"variant":"solo:safety"},{"bleu":41.70214845351047,"chrf":64.54998204011929,"critical_error_rate":0.35,"n":40,"ter":44.57700169753694,"variant":"solo:linguist"},{"converged_fraction":0.0,"mean_convergence_round":null,"mean_rounds_run":2,"n":40,"variant":"_meta"}]},"cascade_retracted":{"stages":[{"backend":"tencent/Hy-MT2-7B","bleu":47.308733468657216,"bleu_delta":null,"changed_fraction":null,"chrf":69.92749241019847,"critical_delta":null,"critical_error_rate":0.325,"mean_glossary_terms":0,"n":40,"role":"translate","stage":"1-translate","ter":41.01153580653881},{"backend":"Qwen/Qwen3.5-4B","bleu":29.411654581949673,"bleu_delta":-17.897078886707543,"changed_fraction":0.875,"chrf":49.42015595915056,"critical_delta":0.22500000000000003,"critical_error_rate":0.55,"mean_glossary_terms":14.575,"n":40,"role":"terminologise","stage":"2-terminologise","ter":649.5762771726122},{"backend":"Qwen/Qwen3.5-4B","bleu":50.307738739994825,"bleu_delta":20.896084158045152,"changed_fraction":0.825,"chrf":71.32581921636562,"critical_delta":-0.20000000000000007,"critical_error_rate":0.35,"mean_glossary_terms":0,"n":40,"role":"arbitrate","stage":"3-arbitrate","ter":39.4579858313214}]},"cascade_fixed":{"stages":[{"backend":"tencent/Hy-MT2-7B","bleu":47.308733468657216,"bleu_delta":null,"changed_fraction":null,"chrf":69.92749241019847,"critical_delta":null,"critical_error_rate":0.325,"mean_glossary_terms":0,"n":40,"parse_failures":0,"role":"translate","stage":"1-translate","ter":41.01153580653881},{"backend":"Qwen/Qwen3.5-4B","bleu":46.78479590631733,"bleu_delta":-0.5239375623398885,"changed_fraction":0.85,"chrf":69.48024751889143,"critical_delta":0.04999999999999999,"critical_error_rate":0.375,"mean_glossary_terms":14.575,"n":40,"parse_failures":0,"role":"terminologise","stage":"2-terminologise","ter":41.64351464320042},{"backend":"Qwen/Qwen3.5-4B","bleu":51.01564119532627,"bleu_delta":4.23084528900894,"changed_fraction":0.875,"chrf":72.0401707346633,"critical_delta":0.0,"critical_error_rate":0.375,"mean_glossary_terms":0,"n":40,"parse_failures":0,"role":"arbitrate","stage":"3-arbitrate","ter":38.20292186214571}]},"gloss_mined_freq":{"arms":[{"arm":"none","bleu":49.013385452239916,"chrf":71.19372374638436,"critical_error_rate":0.22,"finding_counts":{"laterality_added_or_flipped":2,"laterality_missing_or_flipped":3,"negation_dropped":1,"negation_introduced":1,"number_or_measurement_mismatch":15,"terminology_not_preserved":1},"mean_glossary_terms":0,"n":100,"ter":37.19787881552166},{"arm":"glossary","bleu":46.85467663079758,"chrf":69.68771995289752,"critical_error_rate":0.19,"finding_counts":{"laterality_added_or_flipped":2,"laterality_missing_or_flipped":1,"negation_dropped":1,"negation_introduced":2,"number_or_measurement_mismatch":13,"terminology_not_preserved":1},"mean_glossary_terms":9.3,"n":100,"ter":38.42146821843776},{"arm":"distractor","bleu":45.75062459550415,"chrf":68.56681791980681,"critical_error_rate":0.17,"finding_counts":{"laterality_added_or_flipped":2,"laterality_missing_or_flipped":2,"negation_dropped":1,"number_or_measurement_mismatch":13,"terminology_not_preserved":1},"mean_glossary_terms":9.3,"n":100,"ter":39.80202071074711}],"extra":{"none":{"injected":0,"adopted":null,"orphan":null},"glossary":{"injected":930,"adopted":0.9064516129032258,"orphan":0.17556346381969157},"distractor":{"injected":930,"adopted":0.08494623655913978,"orphan":0.4810126582278481}},"tests":{"glossary_vs_distractor":{"n":100,"mcnemar_p":0.6875,"bleu_delta":1.1040520352934526,"bleu_p":0.1115},"glossary_vs_none":{"n":100,"mcnemar_p":0.375,"bleu_delta":-2.1587088214423513,"bleu_p":0.0177}}},"gloss_mined_hard":{"arms":[{"arm":"none","bleu":49.013385452239916,"chrf":71.19372374638436,"critical_error_rate":0.22,"finding_counts":{"laterality_added_or_flipped":2,"laterality_missing_or_flipped":3,"negation_dropped":1,"negation_introduced":1,"number_or_measurement_mismatch":15,"terminology_not_preserved":1},"mean_glossary_terms":0,"n":100,"ter":37.19787881552166},{"arm":"glossary","bleu":46.775692072795714,"chrf":69.26061520649819,"critical_error_rate":0.2,"finding_counts":{"laterality_added_or_flipped":2,"laterality_missing_or_flipped":2,"negation_dropped":3,"number_or_measurement_mismatch":13,"terminology_not_preserved":1},"mean_glossary_terms":3.74,"n":100,"ter":38.95240214868353},{"arm":"distractor","bleu":46.89724141083894,"chrf":69.57568611524434,"critical_error_rate":0.19,"finding_counts":{"laterality_added_or_flipped":3,"negation_dropped":1,"number_or_measurement_mismatch":15,"terminology_not_preserved":1},"mean_glossary_terms":3.74,"n":100,"ter":39.532379736596006}],"extra":{"none":{"injected":0,"adopted":null,"orphan":null},"glossary":{"injected":374,"adopted":0.8342245989304813,"orphan":0.4358974358974359},"distractor":{"injected":374,"adopted":0.10427807486631016,"orphan":0.8205128205128205}},"tests":{"glossary_vs_distractor":{"n":100,"mcnemar_p":1.0,"bleu_delta":-0.12154933804323263,"bleu_p":0.4521},"glossary_vs_none":{"n":100,"mcnemar_p":0.6875,"bleu_delta":-2.23769337944419,"bleu_p":0.0035}}}},"worked_example":{"ref":"No pleural effusion. A 5 mm nodule in the left upper lobe.","src":"Kein Pleuraerguss. Ein 5 mm Knoten im linken Oberlappen.","rows":[{"label":"exact match","hyp":"No pleural effusion. A 5 mm nodule in the left upper lobe.","bleu":100.0,"chrf":100.0,"ter":0.0,"codes":[]},{"label":"negation dropped","hyp":"Pleural effusion. A 5 mm nodule in the left upper lobe.","bleu":84.46,"chrf":92.19,"ter":8.33,"codes":["negation_dropped"]},{"label":"laterality flipped","hyp":"No pleural effusion. A 5 mm nodule in the right upper lobe.","bleu":78.25,"chrf":87.5,"ter":8.33,"codes":["laterality_missing_or_flipped","laterality_added_or_flipped"]},{"label":"measurement wrong","hyp":"No pleural effusion. A 15 mm nodule in the left upper lobe.","bleu":78.25,"chrf":92.54,"ter":8.33,"codes":["number_or_measurement_mismatch"]},{"label":"harmless paraphrase","hyp":"No pleural fluid collection. A 5 mm nodule within the left upper lobe.","bleu":53.04,"chrf":75.34,"ter":25.0,"codes":[]}]},"signatures":{"bleu":"BLEU|nrefs:1|case:mixed|eff:yes|tok:13a|smooth:exp|version:2.6.0","chrf":"chrF++|nrefs:1|case:mixed|eff:yes|nc:6|nw:2|space:no|version:2.6.0","ter":"TER|nrefs:1|case:lc|tok:tercom|norm:no|punct:yes|asian:no|version:2.6.0"},"ceiling":{"n":100,"error_docs":22,"numeric_only":15,"reachable":7,"detectors":{"number_unit_parser":15,"laterality_lexicon":5,"segment_negation_cues":2}},"variance":{"term":"Beurteilung","corpus":{"conclusion":50,"impression":32,"assessment":6},"val":{"conclusion":16,"impression":14,"assessment":1}},"banks":{"freq":{"terms":87,"already":0.6817586206896551,"precision_audit":0.9152542372881356},"hard":{"terms":28,"already":0.2907857142857143,"precision_audit":0.39285714285714285}},"determinism":{"documents":100,"identical":100}}</script>
+<script>
+const D = JSON.parse(document.getElementById('data').textContent);
+const API = new Set(['glm-5.2','MiniMax-M3','DeepSeek-V4-Flash']);
+const f = (v, d=2) => (v === null || v === undefined || Number.isNaN(v)) ? '&mdash;' : Number(v).toFixed(d);
+const nm = m => `<span class="mono">${m}</span>` + (API.has(m) ? '<span class="cloud">API</span>' : '');
+
+/* ---- rankings ---- */
+const real = Object.keys(D.singlepass).filter(m => m !== 'identity');
+const withComet = real.filter(m => D.comet[m]);
+const ranks = [
+  ['surface','BLEU', [...real].sort((a,b) => D.singlepass[b].bleu - D.singlepass[a].bleu)],
+  ['semantic','COMET', [...withComet].sort((a,b) => D.comet[b].comet - D.comet[a].comet)],
+  ['clinical','Critical errors', [...real].sort((a,b) => D.singlepass[a].crit - D.singlepass[b].crit)],
+];
+document.getElementById('rankings').innerHTML = ranks.map(([fam,label,order]) =>
+  `<div class="rankcol fam-${fam}"><h3>${label}</h3><ol>${order.slice(0,5).map(m => `<li>${m}</li>`).join('')}</ol></div>`
+).join('');
+
+/* ---- worked example ---- */
+const we = D.worked_example;
+document.getElementById('worked-table').innerHTML =
+  `<thead><tr><th>Candidate</th><th>BLEU &uarr;</th><th>chrF++ &uarr;</th><th>TER &darr;</th><th style="text-align:left">Detectors</th></tr></thead><tbody>` +
+  we.rows.map(r => {
+    const danger = r.codes.length > 0;
+    const codes = danger ? r.codes.map(c => `<span class="chip crit">${c.replace(/_/g,' ')}</span>`).join(' ')
+                         : '<span style="color:var(--muted)">none</span>';
+    return `<tr><td>${danger ? '<b>' + r.label + '</b>' : r.label}</td><td>${f(r.bleu)}</td><td>${f(r.chrf)}</td><td>${f(r.ter)}</td>` +
+           `<td style="text-align:left;white-space:normal">${codes}</td></tr>`;
+  }).join('') + '</tbody>';
+
+/* ---- metric cards ---- */
+const CARDS = [
+  {fam:'surface', name:'BLEU', range:'0&ndash;100 &middot; higher better &middot; needs a reference',
+   what:'Modified n-gram precision for n = 1&hellip;4, combined as a geometric mean and multiplied by a brevity penalty.',
+   formula:`BP   = 1                 if c > r
+     = exp(1 − r/c)      if c ≤ r        c = candidate length, r = reference length
+
+BLEU = BP · exp( Σ ¼ · log pₙ ) · 100          pₙ = clipped n-gram precision`,
+   read:'<b>Bands are folklore, not a standard:</b> under 15 useless, 30&ndash;40 understandable, 50&ndash;60 very good. The geometric mean is unforgiving &mdash; one zero precision zeroes the score &mdash; so exponential smoothing and effective order are enabled for short segments.',
+   cant:'It has no notion of meaning. &ldquo;No&rdquo; and &ldquo;the&rdquo; carry the same weight, so it cannot see that a number changed, only that a token did.'},
+  {fam:'surface', name:'chrF++', range:'0&ndash;100 &middot; higher better &middot; needs a reference',
+   what:'F-score over character n-grams to order 6, plus word n-grams to order 2 (the &ldquo;++&rdquo;).',
+   formula:`chrP = matched n-grams / n-grams in candidate
+chrR = matched n-grams / n-grams in reference
+
+chrF++ = (1 + β²) · chrP · chrR / (β² · chrP + chrR) · 100      β = 2`,
+   read:'β = 2 weights <b>recall twice as heavily as precision</b>, so omitting content is penalised harder than adding it. Runs 15&ndash;25 points above BLEU on the same output; the two are not comparable.',
+   cant:'Fairer to German than BLEU, because compounding means one wrong morpheme only dents a character match. Still blind to which words matter clinically.'},
+  {fam:'surface', name:'TER', range:'0&ndash;100+ &middot; <b>lower better</b> &middot; needs a reference',
+   what:'Minimum edits to turn the candidate into the reference, normalised by reference length.',
+   formula:`TER = (insertions + deletions + substitutions + shifts)
+      ─────────────────────────────────────────────────  × 100
+                average reference length`,
+   read:'<b>The only metric here where lower is better</b> &mdash; a frequent source of misread tables. A <i>shift</i> of a contiguous block costs 1, the same as one substitution, which makes it tolerant of German verb placement.',
+   cant:'It is a post-editing-effort proxy, not a meaning check.'},
+  {fam:'semantic', name:'COMET', range:'~0&ndash;1 &middot; higher better &middot; needs a reference',
+   what:'Source, hypothesis and reference are encoded with XLM-R-large; the embeddings feed a regressor trained to predict human MQM scores. Checkpoint <code>Unbabel/wmt22-comet-da</code>.',
+   formula:`score = FFN( enc(src), enc(hyp), enc(ref), |hyp−ref|, hyp⊙ref )
+
+trained to minimise MSE against human MQM judgements`,
+   read:'The scale is compressed and uncalibrated: the whole real field spans <b>0.67 to 0.83</b>, with the identity control at 0.61. <b>Differences under ~0.01 are not meaningful.</b>',
+   cant:'It stops punishing legitimate paraphrase, which is the fix BLEU needed &mdash; and it still does not track clinical risk. It is also off-distribution here: trained on WMT news, applied to radiology reports.'},
+  {fam:'clinical', name:'Critical-error rate', range:'0&ndash;100% &middot; <b>lower better</b> &middot; no reference',
+   what:'Share of documents carrying at least one <span class="chip crit">critical</span> finding from the source-vs-output detectors.',
+   formula:`critical-error rate = documents with ≥ 1 critical finding
+                      ─────────────────────────────────────── × 100
+                               total documents`,
+   read:'A <b>document-level rate, not a count</b>: a report with six critical findings and one with a single finding both count once. It answers &ldquo;in what fraction of reports did a clinically load-bearing fact fail to survive?&rdquo;',
+   cant:'It needs no reference translation, and every finding carries the source and target evidence that triggered it, so any number can be audited back to a sentence.'},
+  {fam:'clinical', name:'The four detectors', range:'counts by code &middot; lower better &middot; no reference',
+   what:'Rules comparing the <b>source</b> against the <b>output</b>, never the reference.',
+   formula:`negation_dropped / negation_introduced          CRITICAL   cue lexicon per language
+laterality_missing_or_flipped / _added_        CRITICAL   {left, right, bilateral} set diff
+number_or_measurement_mismatch                 CRITICAL   parse, normalise units, compare multisets
+terminology_not_preserved                      MAJOR      term bank, inflection-tolerant`,
+   read:'<b>Severity is easy to misread.</b> Only the first three are <span class="chip crit">critical</span>. Terminology findings are <span class="chip maj">major</span> and contribute <b>zero</b> to the critical-error rate, so a system can carry many of them and still score well.',
+   cant:'Precision is imperfect (~38% of number findings were false positives on manual review) and recall is unmeasured. Coverage also varies by language pair &mdash; for Turkish&ndash;English only the language-agnostic number check runs.'},
+];
+document.getElementById('cards').innerHTML = CARDS.map(c => `
+  <div class="card fam-${c.fam}">
+    <div class="top"><h3>${c.name}</h3><span class="range">${c.range}</span></div>
+    <p class="note">${c.what}</p>
+    <div class="formula">${c.formula}</div>
+    <p class="note"><b>How to read it.</b> ${c.read}</p>
+    <p class="note"><b>Limits.</b> ${c.cant}</p>
+  </div>`).join('');
+
+/* ---- single pass ---- */
+const spOrder = [...real].sort((a,b) => D.singlepass[a].crit - D.singlepass[b].crit);
+const bestC = Math.min(...real.map(m => D.singlepass[m].crit));
+const bestB = Math.max(...real.map(m => D.singlepass[m].bleu));
+const bestW = Math.min(...real.map(m => D.singlepass[m].words));
+document.getElementById('sp-table').innerHTML =
+  `<thead><tr><th>System</th><th>crit% &darr;</th><th>words% &darr;</th><th>BLEU &uarr;</th><th>chrF++ &uarr;</th><th>TER &darr;</th><th>COMET &uarr;</th><th>n</th></tr></thead><tbody>` +
+  spOrder.map(m => {
+    const s = D.singlepass[m], c = D.comet[m];
+    return `<tr><td class="name">${nm(m)}</td>` +
+      `<td class="${s.crit === bestC ? 'best' : ''}">${f(s.crit)}</td>` +
+      `<td class="${s.words === bestW ? 'best' : ''}">${f(s.words)}</td>` +
+      `<td class="${s.bleu === bestB ? 'best' : ''}">${f(s.bleu)}</td>` +
+      `<td>${f(s.chrf)}</td><td>${f(s.ter)}</td><td>${c ? f(c.comet, 4) : '&mdash;'}</td><td>${s.n}</td></tr>`;
+  }).join('') +
+  (() => { const s = D.singlepass['identity'], c = D.comet['identity'];
+    return `<tr class="control"><td class="name">identity (control)</td><td>${f(s.crit)}</td><td>${f(s.words)}</td><td>${f(s.bleu)}</td>` +
+           `<td>${f(s.chrf)}</td><td>${f(s.ter)}</td><td>${c ? f(c.comet,4) : '&mdash;'}</td><td>${s.n}</td></tr>`; })() +
+  '</tbody>';
+
+/* ---- round trip ---- */
+const rtReal = Object.keys(D.roundtrip).filter(m => m !== 'identity')
+  .sort((a,b) => D.roundtrip[b].bleu[0] - D.roundtrip[a].bleu[0]);
+const rtRow = m => {
+  const r = D.roundtrip[m];
+  const d = r.bleu[0] - r.bleu[9];
+  const front = d === 0 ? null : 100 * (r.bleu[0] - r.bleu[1]) / d;
+  return `<td>${f(r.bleu[0])}</td><td>${f(r.bleu[1])}</td><td>${f(r.bleu[9])}</td>` +
+         `<td>${d === 0 ? '0.00' : '&minus;' + f(d)}</td><td>${f(r.chrf[0])}</td><td>${f(r.chrf[9])}</td>` +
+         `<td>${r.cen1} &rarr; ${r.cen}</td><td>${r.cde1} &rarr; ${r.cde}</td>` +
+         `<td>${front === null ? '&mdash;' : f(front,0) + '%'}</td>`;
+};
+document.getElementById('rt-table').innerHTML =
+  `<thead><tr><th>System</th><th>BLEU c1</th><th>c2</th><th>c10</th><th>&Delta;</th><th>chrF c1</th><th>chrF c10</th>` +
+  `<th>crit% DE&rarr;EN</th><th>crit% EN&rarr;DE</th><th>front-loaded</th></tr></thead><tbody>` +
+  rtReal.map(m => `<tr><td class="name">${nm(m)}</td>${rtRow(m)}</tr>`).join('') +
+  `<tr class="control"><td class="name">identity (control)</td>${rtRow('identity')}</tr></tbody>`;
+
+/* ---- interventions ---- */
+const GL = [
+  ['Dictionary &mdash; whole reports, Wikidata bank (2,834 entries)','gloss_whole_wikidata','40'],
+  ['Dictionary &mdash; whole reports, RadLex+Wikidata (47,997)','gloss_whole_radlex','40'],
+  ['Dictionary &mdash; medical text only, RadLex+Wikidata','gloss_med_merged','109'],
+  ['Dictionary &mdash; medical text only, clinical findings only (2,777)','gloss_med_findings','109'],
+];
+let h = '';
+for (const [title, key, n] of GL) {
+  const e = D.experiments[key]; if (!e) continue;
+  h += `<h3 style="margin:26px 0 0">${title}</h3><div class="tablebox"><table>` +
+    `<thead><tr><th>Arm</th><th>BLEU &uarr;</th><th>chrF++ &uarr;</th><th>TER &darr;</th><th>crit% &darr;</th><th>terms/doc</th><th>n</th></tr></thead><tbody>` +
+    e.arms.map(a => `<tr><td class="name">${a.arm}</td><td>${f(a.bleu)}</td><td>${f(a.chrf)}</td>` +
+      `<td>${f(a.ter)}</td><td>${f(a.critical_error_rate * 100, 1)}</td>` +
+      `<td>${f(a.mean_glossary_terms, 1)}</td><td>${n}</td></tr>`).join('') + '</tbody></table></div>';
+}
+for (const [title, key] of [['Debate &mdash; whole reports (20)','debate_whole'],['Debate &mdash; medical text only (40)','debate_med']]) {
+  const e = D.experiments[key]; if (!e) continue;
+  h += `<h3 style="margin:26px 0 0">${title}</h3><div class="tablebox"><table>` +
+    `<thead><tr><th>Variant</th><th>BLEU &uarr;</th><th>chrF++ &uarr;</th><th>TER &darr;</th><th>crit% &darr;</th></tr></thead><tbody>` +
+    e.variants.filter(v => v.variant !== '_meta').map(v =>
+      `<tr><td class="name">${v.variant}</td><td>${f(v.bleu)}</td><td>${f(v.chrf)}</td><td>${f(v.ter)}</td>` +
+      `<td>${f(v.critical_error_rate * 100, 1)}</td></tr>`).join('') + '</tbody></table></div>';
+}
+const cas = D.experiments['cascade_fixed'];
+if (cas) {
+  h += `<h3 style="margin:26px 0 0">Review cascade &mdash; whole reports (40)</h3><div class="tablebox"><table>` +
+    `<thead><tr><th>Stage</th><th>Backend</th><th>BLEU &uarr;</th><th>&Delta;BLEU</th><th>crit% &darr;</th><th>&Delta;crit</th><th>changed</th><th>parse fails</th></tr></thead><tbody>` +
+    cas.stages.map(s => `<tr><td class="name">${s.stage}</td><td style="text-align:left;font-size:12px">${s.backend}</td>` +
+      `<td>${f(s.bleu)}</td><td>${s.bleu_delta === null ? '&mdash;' : (s.bleu_delta > 0 ? '+' : '&minus;') + f(Math.abs(s.bleu_delta))}</td>` +
+      `<td>${f(s.critical_error_rate * 100, 1)}</td>` +
+      `<td>${s.critical_delta === null ? '&mdash;' : (s.critical_delta > 0 ? '+' : '&minus;') + f(Math.abs(s.critical_delta * 100), 1)}</td>` +
+      `<td>${s.changed_fraction === null ? '&mdash;' : f(s.changed_fraction * 100, 0) + '%'}</td>` +
+      `<td>${s.parse_failures}</td></tr>`).join('') + '</tbody></table></div>' +
+    `<p class="note" style="margin-top:12px">An earlier run of this cascade reported &minus;17.9 BLEU and +22.5 crit at
+     stage 2. That was a parser fault &mdash; 17 of 40 replies were scored as their own commentary &mdash; and is
+     retracted. <code>parse failures</code> is reported per stage so it cannot recur silently.</p>`;
+}
+/* mined banks: extra adoption / orphan / significance columns */
+const MINED = [
+  ['Mined from the corpus &mdash; frequency bank (87 terms)','gloss_mined_freq','freq'],
+  ['Mined from the corpus &mdash; headroom bank (28 terms)','gloss_mined_hard','hard'],
+];
+for (const [title, key, bank] of MINED) {
+  const e = D.experiments[key]; if (!e) continue;
+  const b = D.banks?.[bank];
+  h += `<h3 style="margin:26px 0 0">${title}</h3>`;
+  if (b) h += `<p class="note" style="margin-top:6px">Baselines already produce ` +
+    `<b>${f(b.already*100,0)}%</b> of these terms unprompted &middot; mining precision by hand audit ` +
+    `<b>~${f(b.precision_audit*100,0)}%</b></p>`;
+  h += `<div class="tablebox"><table>` +
+    `<thead><tr><th>Arm</th><th>BLEU* &uarr;</th><th>chrF++* &uarr;</th><th>TER* &darr;</th><th>crit% &darr;</th>` +
+    `<th>terms/doc</th><th>adopted</th><th>orphan</th><th>n</th></tr></thead><tbody>` +
+    e.arms.map(a => { const x = e.extra?.[a.arm] || {};
+      return `<tr><td class="name">${a.arm}</td><td>${f(a.bleu)}</td><td>${f(a.chrf)}</td>` +
+      `<td>${f(a.ter)}</td><td>${f(a.critical_error_rate*100,1)}</td><td>${f(a.mean_glossary_terms,1)}</td>` +
+      `<td>${x.adopted == null ? '&mdash;' : f(x.adopted*100,1)+'%'}</td>` +
+      `<td>${x.orphan == null ? '&mdash;' : f(x.orphan*100,1)+'%'}</td><td>${a.n}</td></tr>`;
+    }).join('') + '</tbody></table></div>';
+  const t = e.tests || {};
+  const line = (k, label) => { const v = t[k]; if (!v) return '';
+    return `${label}: BLEU* ${v.bleu_delta>0?'+':'&minus;'}${f(Math.abs(v.bleu_delta))} ` +
+           `(bootstrap p = ${f(v.bleu_p,4)}), critical errors McNemar p = ${f(v.mcnemar_p,3)}`; };
+  h += `<p class="note" style="margin-top:10px">Paired on the same documents &mdash; ` +
+       `${line('glossary_vs_distractor','vs distractor')}<br>${line('glossary_vs_none','vs no glossary')}</p>`;
+}
+h += `<p class="note" style="margin-top:14px">* <b>Reference-based scores for the two mined banks are
+ contaminated by construction:</b> the terms were mined from the same English text BLEU scores against. The
+ train/val split removes direct memorisation and leaves house style, so these are an upper bound that cannot be
+ cleaned up. The clinical column never consults the reference and is unaffected.</p>`;
+document.getElementById('exp').innerHTML = h;
+
+/* ---- ceiling ---- */
+if (D.ceiling) {
+  const c = D.ceiling, tot = Object.values(c.detectors).reduce((a,b)=>a+b,0);
+  document.getElementById('ceil-table').innerHTML =
+    `<thead><tr><th>Critical detector</th><th>findings</th><th>share</th></tr></thead><tbody>` +
+    Object.entries(c.detectors).map(([d,n]) =>
+      `<tr><td class="name">${d}</td><td>${n}</td><td>${f(100*n/tot,1)}%</td></tr>`).join('') +
+    `</tbody>`;
+  document.getElementById('ceil-note').innerHTML =
+    `<b>${c.numeric_only} of the ${c.error_docs} error documents fail on numbers alone.</b> A bilingual term
+     pair says nothing about whether a measurement survived, so no terminology intervention can reach them.
+     That caps any glossary at the remaining <b>${c.reachable} documents in ${c.n}</b> &mdash; and most of those
+     are <em>dropped</em> laterality, which a term pair also cannot repair, since a glossary cannot supply a word
+     the model declined to emit. A null result on the clinical layer is the arithmetically predicted outcome.`;
+}
+if (D.variance) {
+  const v = D.variance, ca = v.corpus, va = v.val;
+  const sum = o => Object.values(o).reduce((a,b)=>a+b,0);
+  const tc = sum(ca), tv = sum(va);
+  const forms = Object.keys(ca);
+  document.getElementById('var-table').innerHTML =
+    `<thead><tr><th><span class="mono">${v.term}</span> is rendered</th><th>whole corpus</th><th>share</th>` +
+    `<th>held-out half</th><th>share</th></tr></thead><tbody>` +
+    forms.map(w => `<tr><td><i>${w}</i></td><td>${ca[w]||0}</td><td>${f(100*(ca[w]||0)/tc,0)}%</td>` +
+      `<td>${va[w]||0}</td><td>${f(100*(va[w]||0)/tv,0)}%</td></tr>`).join('') +
+    `<tr class="control"><td>total reports with the header on both sides</td><td>${tc}</td><td></td><td>${tv}</td><td></td></tr>` +
+    '</tbody>';
+}
+
+document.getElementById('sigs').textContent =
+  [D.signatures.bleu, D.signatures.chrf, D.signatures.ter].join('\n');
+</script>

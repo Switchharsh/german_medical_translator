@@ -11,7 +11,7 @@ This chapter surveys the alternatives and commits to an order of adoption.
 
 ## The gap, stated precisely
 
-Two things are missing.
+Three things are missing.
 
 1. **A learned semantic metric.** Every surface metric here is lexical. None can tell
    that "pleural fluid collection" and "pleural effusion" mean the same thing — as
@@ -21,6 +21,38 @@ Two things are missing.
    The `BWK 12` → `L12` miss (thoracic vertebra rendered as lumbar, no detector fired)
    is not a bug to patch — it is the signature of a closed-class approach. Something
    open-class is needed to bound the true error rate.
+3. **More than one reference — or none.** This was added after
+   [Experiment 4](09-experiments-glossary-debate.md#experiment-4--the-corpus-cannot-agree-with-itself)
+   measured the size of the problem, and it is the most concrete of the three.
+
+   PARROT gives one English translation per report, and on the vocabulary that
+   matters the corpus does not agree with itself about what that translation is.
+   `Beurteilung` is rendered *conclusion* 50 times, *impression* 32 and
+   *assessment* 6 across the reports where both sides carry the header, so **the
+   most frequent form accounts for only 57% of occurrences** — 52% on the
+   held-out half, where it is nearly a coin flip between *conclusion* and
+   *impression*. All of those forms are what radiologists write — this project's
+   own section classifier in
+   [`data/sections.py`](../src/medmt_eval/data/sections.py) lists
+   `Impression | Assessment | Conclusion | Summary | Interpretation` as one role
+   precisely because they are interchangeable.
+
+   A single-reference lexical metric therefore cannot separate *wrong term* from
+   *correct synonym this reference happens not to use*, and for high-frequency
+   report vocabulary the second case is the common one. This is not the same
+   complaint as item 1: a learned metric scores meaning but still scores it
+   against one reference, so COMET inherits the problem wherever the reference's
+   word choice was arbitrary. The fixes are multiple references (expensive — it
+   is retranslation, and by clinicians) or metrics that never consult a reference
+   at all, which is what makes the source-referenced clinical detectors and the
+   LLM judge in §C structurally more interesting than their current accuracy
+   suggests.
+
+   Experiment 4 also gives the practical warning for anyone tempted to shortcut
+   this: it mined its glossary from the corpus' own English side, which biases
+   every reference-based comparison *in the glossary's favour*, and BLEU still
+   fell 2.16 points against no glossary at all (p = 0.018). Contamination did not
+   even buy a spurious win.
 
 ---
 
@@ -93,7 +125,7 @@ judgement the detectors cannot make.
   (RUBRIC-MQM, [ACL 2025 Industry](https://aclanthology.org/2025.acl-industry.12/));
   moving from a bare GEMBA prompt to a rubric-style one lifted correlation with humans
   from 0.09 to 0.35 — a warning about how much the prompt determines the result.
-- **Self-preference.** Three of our thirteen systems are hosted LLMs. Using an LLM to
+- **Self-preference.** Three of our fourteen systems are hosted LLMs. Using an LLM to
   judge LLM translations invites a conflict of interest, and the judge must not be one
   of the systems under test.
 
@@ -193,41 +225,40 @@ They are mutually exclusive in one environment. COMET therefore lives in its own
 `.venv-comet`; the main venv stays on transformers 5.x for the translation
 models.
 
-## TODO — benchmark DeepL
+## Result — DeepL benchmarked; the glossary arm is still open
 
-**DeepL is the obvious commercial baseline for DE↔EN and it is not yet in the
-benchmark.** An adapter already exists (`src/medmt_eval/models/deepl_mt.py`,
-adapter name `deepl`, free-tier aware) and is wired into the factory; it has
-never been run against PARROT.
+**Done 2026-09-29.** DeepL now has a single pass over PARROT-DE and the ten-cycle
+round trip. Full numbers in
+[05-results.md](05-results.md#finding-6--deepl-is-competitive-on-the-words-and-unstable-under-repetition).
+In short: sixth of thirteen on negation and laterality (6.8% of documents), fourth on
+BLEU, and the least stable of the strong systems under repetition (−10.8 BLEU against
+−3.8 to −5.7 for the best hosted LLMs). It does not change the conclusion, and it removes
+the objection that every claim in the thesis was relative to open models and one
+hosted gateway.
 
-This matters more than an extra row in the table. Every claim in this thesis is
-relative to open models and one hosted gateway. DeepL is what a German hospital
-would actually reach for, so "is a specialised model needed?" is not answered
-without it.
+It was kept separate from German MeSH as planned: DeepL was scored against the human
+references on PARROT, never against an MT-derived term bank, because German MeSH is
+itself a DeepL first pass ([08-terminology.md](08-terminology.md)).
 
-Two things to get right when it runs:
+**Practical notes.** It runs on the login node (the GPU nodes have no internet). The free
+plan allows **1,000,000 characters a month**, not the 500,000 an earlier version of this
+section stated; the run used 530,862 in total (226,785 for the single pass), leaving
+roughly 469,000 unspent. See [02-models.md](02-models.md#deepl) for the adapter fixes.
 
-- **It is the reference commercial system, and it is also upstream of one of the
-  candidate dictionaries.** German MeSH is a DeepL first pass
-  ([08-terminology.md](08-terminology.md)), so any evaluation that scores DeepL
-  against German MeSH terminology is scoring it against its own output. Keep the
-  two apart: benchmark DeepL on PARROT with the human references, never against
-  an MT-derived term bank.
-- **Glossary support is a first-class feature of the API**, which makes DeepL the
-  natural second arm for Experiment 1 — its glossary is applied inside the
-  translation engine rather than injected as a prompt, so it tests whether the
-  null result in [09](09-experiments-glossary-debate.md) is about dictionaries in
-  general or about *prompt-injected* dictionaries specifically. That is the
-  single most informative follow-up available.
-
-Needs: an API key (free tier is 500k chars/month; PARROT-DE is ~229k characters,
-so the full corpus fits), and `DEEPL_API_KEY` exported at submission. Both the
-single-pass benchmark and the ten-cycle round-trip should be run.
+**Still open: the glossary arm, and it is the more informative half.** DeepL applies a
+glossary inside the translation engine rather than as a prompt instruction, so a DeepL
+glossary run would separate "dictionaries do not help" from "*prompt-injected*
+dictionaries do not help". `/v3/glossaries` is reachable on the project's key (HTTP 200,
+no glossaries yet), but **whether the free plan allows creating one has not been tested**.
+The cheapest first step is a single tiny glossary. The ceiling analysis in
+[09](09-experiments-glossary-debate.md) predicts a small effect on the clinical layer
+whatever the glossary contains, since two thirds of critical errors are numeric, so this
+is a test of mechanism, not an expected fix.
 
 ## Order of adoption
 
 1. **COMET-22 + COMET-Kiwi over the existing outputs.** Cheapest, no new translations
-   needed — all thirteen systems' outputs are already on disk. Answers immediately
+   needed — all fourteen systems' outputs are already on disk. Answers immediately
    whether the BLEU ranking survives a semantic metric. If COMET reorders the systems,
    that strengthens the central finding; if it reproduces the BLEU order, the clinical
    layer is carrying the whole argument and must be hardened first.

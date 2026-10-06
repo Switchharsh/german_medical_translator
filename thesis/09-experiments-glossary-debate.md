@@ -168,7 +168,7 @@ stage *n* is credited only with what it changed relative to stage *n−1*.
 
 **Only stage 2 is shown the dictionary, and that asymmetry is the experiment.**
 Stage 3 exists to catch corrections the glossary got *wrong* — and the rerun of
-Experiment 1 established that it has something to catch: 26% of glossary terms
+Experiment 1 established that it has something to catch: 21% of glossary terms
 the model adopted were terms the human reference does not use. A reviewer with
 the same glossary would inherit the same bias.
 
@@ -326,6 +326,174 @@ run. It is now measured: three models averaging toward the worst of them.
 
 Again 0% of documents converged in two rounds.
 
+## Experiment 4 — a glossary mined from the corpus itself
+
+Experiments 1 and 3 both failed in the same place, and
+[08-terminology.md](08-terminology.md) identified the mechanism: 21% of the
+injected terms the model adopted are terms the human reference does not use,
+because **an ontology's preferred label is not report register**. RadLex has the
+right concepts and the wrong wording.
+
+A glossary read off the reports themselves cannot have that defect. Its terms are
+report register by construction. This experiment tests whether that is enough.
+
+### The cost, stated first
+
+Mining terminology from PARROT **invalidates every reference-based metric on this
+corpus**. BLEU, chrF++, TER and COMET score against the same English
+translations the terms were mined from, so injecting mined wording and then
+measuring agreement with it measures leakage. Splitting by document does not
+repair it — the same radiologists wrote both halves, so house style crosses the
+split.
+
+So the split here buys something narrower than it looks: it guarantees no scored
+document contributed a term, which removes *direct* memorisation, and leaves
+register leakage untouched. The primary read is therefore the source-referenced
+layer — the negation, laterality, number and measurement detectors, which never
+look at the reference. Reference-based scores are reported and labelled
+contaminated. This is the rule in
+[03-methods.md](03-methods.md#contamination-discipline) applied rather than
+broken: the corpus measures terminology and does not generate it, *except* in
+this one experiment, which exists to measure what that exception costs.
+
+### Method
+
+196 train / 100 val documents, stratified by modality, seed 20260928
+(`data/splits/parrot_de_mine_v1.json`). Terms come from the train half; the
+experiment runs on the val half. Built by
+[`scripts/build_glossary_mined.py`](../scripts/build_glossary_mined.py).
+
+Three decisions were forced by measurement rather than chosen up front, and each
+one is the reason the output is usable at all.
+
+**Align at the sentence level, not the document level.** The first attempt scored
+Dice coefficients over whole documents and produced `Herz -> mediastinum`,
+`Milz -> kidneys` and `Leber -> pancreas`. The cause is structural, not
+statistical: radiology anatomy terms *systematically co-occur* — heart,
+mediastinum, pleura and lungs appear in every chest CT — so a document-wide
+window cannot separate "is the translation of" from "appears in the same report
+as". Narrowing the window to a sentence removed every such swap. Sentences are
+paired by index in the 49% of train documents whose sentence counts match on both
+sides, with a 0.5–2.0 length-ratio guard. This is much cruder than `fast_align`
+or `eflomal`; it is adequate here only because PARROT's two sides are direct
+translations, so order is preserved.
+
+**Let the English side be a phrase.** One German compound routinely maps to an
+English multiword. Unigram-only alignment truncated `Pleuraerguss` to `pleural`
+and `Perikarderguss` to `pericardial`, and injecting a truncation is worse than
+injecting nothing. Candidates are 1–3 grams and the longest within 10% of the
+best Dice wins.
+
+**Require a mutual best match.** Without it, `available for comparison` was
+simultaneously the best match for four different German words. A German word's
+best English candidate must also have that word as its own best German candidate.
+
+That yields 88 pairs. The last step is the one that turned the experiment into a
+different finding.
+
+### Screening against what the models already do
+
+For each mined pair, count how often three baseline systems' *existing*
+train-split translations already contain the English side. A pair at 97% is
+correct and useless — the glossary slot is spent telling the model something it
+already knows, which is precisely the failure mode of the frequency-weighted
+RadLex matches in Experiment 1, where the most-matched term was `indium`.
+
+Splitting the 87 screened pairs at 60% separates them cleanly, and the two halves
+are cleanly *opposed*:
+
+| bank | terms | models already produce it | mining precision (hand audit) |
+|---|---|---|---|
+| `freq` ∖ `hard` (already > 60%) | 59 | 68% | ~92% (54/59) |
+| `hard` (already ≤ 60%) | 28 | 29% | ~39% (11/28) |
+
+Precision and headroom are **anti-correlated**, and the mechanism is not a tuning
+problem. A German term with a stable one-to-one English rendering is easy for the
+aligner *and* easy for the model, for the same reason — the mapping is
+context-free. A term the models get wrong is one whose English form depends on
+context, and a context-free glossary entry cannot express it:
+
+- `frei -> well aerated` is correct inside *Mastoidzellen frei* and wrong
+  everywhere else.
+- `Verschattung -> lung field` is simply wrong (*Verschattung* is an opacity).
+- `groß -> normal in size`, `Frei -> cells are well` — fragments of collocations.
+
+Against which, the correct entries in the hard bank are exactly the register
+differences an ontology could never supply:
+
+| German | mined English | models produce it | what it is |
+|---|---|---|---|
+| `Beurteilung` | conclusion | 0% | models write "Assessment"; radiologists write "Conclusion" |
+| `Ebenen` | two views | 9% | *in zwei Ebenen* is an idiom, not compositional |
+| `belüftet` | aerated | 22% | register |
+| `Abklärung` | evaluation | 37% | register |
+| `Raumforderung` | mass | 41% | register |
+| `Kontrastierung` | enhancement | 62% | register |
+
+Both banks are shipped **exactly as mined, with no hand editing**, so the
+precision of the mining is part of what the experiment tests rather than
+something corrected out of it.
+
+Each bank runs against the standard three arms — `none`, `glossary`,
+`distractor` — on the 100 held-out documents, with `qwen35-4b`, the same backend
+as Experiments 1 and 3. The terminology detector keeps its own external bank
+(`radiology_en_de_starter.csv`), disjoint from the injected glossary, so it is
+not scored on the terms being injected.
+
+### The ceiling, computed before reading the result
+
+The overview asserts that this project's failures are "concentrated in numbers
+and measurements, where terminology and committee methods cannot reach by
+construction". That was a qualitative claim. On the val split it can be made
+exact, and it should be, because it bounds what Experiment 4 could possibly
+achieve before any score is read.
+
+`qwen35-4b` on the 100 held-out documents: 28 carry a critical error, from 35
+critical findings.
+
+| detector | findings | share |
+|---|---|---|
+| `number_unit_parser` | 23 | 65.7% |
+| `laterality_lexicon` | 11 | 31.4% |
+| `segment_negation_cues` | 1 | 2.9% |
+
+**16 of the 28 error documents fail on numbers alone.** No terminology
+intervention can reach them — a bilingual term pair says nothing about whether
+`7646,06 µGym²` survived. That caps any glossary at the remaining 12
+documents, or 12 points of the 28% rate.
+
+The 12 do not survive inspection either. Their non-numeric failures are 5 *dropped*
+laterality findings (the expected side is absent from the output entirely, and a
+glossary cannot supply a word the model declined to emit), 6 flipped-or-other,
+and 1 negation. And the lexical mapping is not what is failing: `rechts → right`
+and `links → left` are in the mined bank precisely because they are frequent, and
+the screening step measures that the baselines already produce them 98% and 96%
+of the time. The laterality errors are not mistranslations of *rechts*; they are
+omissions elsewhere in a long document.
+
+So the honest expectation is a **ceiling near zero on the clinical layer** — at
+most 6 reachable findings across 100 documents, where one document is one point,
+which is inside the noise this design can resolve. Experiment 4 is therefore not
+a test of whether a mined glossary fixes clinical errors on PARROT; the ceiling
+analysis answers that, and the answer is that it cannot, whatever the bank
+contains. What the run can still establish is narrower and worth having:
+
+1. whether mined terms are **adopted** at all, and at what rate against RadLex's
+   80.8%;
+2. whether the adopted-but-absent-from-reference rate falls below RadLex's 20.8%,
+   which is the direct test of the register hypothesis and the reason this
+   experiment exists;
+3. whether the glossary block does **harm** — the distractor arm, and the 39%
+   mining precision of the hard bank, make injected error a live possibility
+   rather than a hypothetical;
+4. how much reference-based score moves purely from leakage, which is a
+   measurement of the contamination itself and useful as a caution for anyone
+   reading corpus-mined glossary results elsewhere.
+
+Recording this before the numbers arrive is the point. A null result that was
+predicted from a computed ceiling is evidence about the corpus; the same null
+reported afterwards reads as a failed experiment.
+
 ## Running them
 
 ```bash
@@ -341,11 +509,20 @@ sbatch scripts/experiments/cascade.slurm
 
 # with the anti-circularity split active
 EXP_HOLDOUT=0.5 BACKEND=local:Qwen/Qwen3.5-4B sbatch scripts/experiments/glossary.slurm
+
+# Experiment 4 — mine the banks from the train split, then run both on val.
+# The builder refuses to overwrite, so --out-suffix is the version.
+python scripts/build_glossary_mined.py --out-suffix v1
+BACKEND=local:Qwen/Qwen3.5-4B sbatch scripts/experiments/glossary_mined.slurm
 ```
 
-Both job scripts preflight the corpus, the glossary (failing if fewer than 100
-usable entries survive filtering), and any credential the chosen backend needs,
-before requesting any work.
+Every job script preflights the corpus, the glossary and any credential the
+chosen backend needs before requesting work. Experiment 1 fails if fewer than 100
+usable entries survive filtering; Experiment 4 uses a floor of 20, since the hard
+bank is 28 entries by construction, and adds one check the others do not need —
+it intersects the val document ids with the mining half and aborts if they
+overlap. That assertion is the entire methodological basis for the run, so it is
+verified at submission rather than assumed.
 
 ## Results
 
@@ -440,11 +617,34 @@ RadLex's preferred label and is not wrong — it is simply not what a radiologis
 writes. The no-glossary arm already had it right, and the glossary overrode a
 correct translation with a formally correct one.
 
-Measured across the run: of **386 injected terms the model adopted, 100 (26%)
-are terms the human reference does not use.** The most frequent offenders are
-exactly the high-frequency report vocabulary — `Beurteilung → assessment` (15,
-where the reference says *evaluation*), `Indikation → indication` (5),
+Measured across the run: of 542 injected terms, the model adopted 438, and
+**91 of those 438 (20.8%) are terms the human reference does not use.** Counting
+every injection, matching case- and punctuation-insensitively; the rate is
+16-28% across all three Experiment-1 runs and every counting variant tried
+(per-injection or deduplicated, raw or normalised match), so the conclusion does
+not depend on the definition. An earlier draft of this chapter reported
+"386 adopted, 100 (26%)", which does not reproduce from the stored results under
+any of those variants and has been corrected; the per-term detail below was
+verified against them and reproduces exactly.
+
+The most frequent offenders are exactly the high-frequency report vocabulary --
+`Beurteilung → assessment` (15), `Indikation → indication` (5),
 `Hinweis auf → suggestive` (4).
+
+`Beurteilung` also shows *why* a single preferred label cannot win here. It is a
+section header, so its rendering can be counted exactly by aligning the German and
+English `impression`-role headers: across the 88 reports carrying both, the
+English side is *conclusion* 50, *impression* 32, *assessment* 6. RadLex's label
+is `assessment` -- the **rarest** of the three, 7% of usage -- which is the
+register failure in one number. But no label would have been safe: even
+*conclusion*, the modal form, is wrong on 43% of reports. (An earlier draft of
+this paragraph asserted the reference says *evaluation*, and a later one gave a
+five-way split including *findings*; both came from searching reference text
+rather than aligning headers, and neither is correct. See
+[the measurement error recorded in Experiment 4](#experiment-4--the-corpus-cannot-agree-with-itself).)
+[Experiment 4](#experiment-4--a-glossary-mined-from-the-corpus-itself) mines
+`Beurteilung → conclusion` from the corpus instead and finds the models produce
+it 0% of the time -- the same disagreement reached from the other side.
 
 So the glossary is doing precisely what it was told to do, and that is the
 problem. "Where the source uses the term on the left, the translation must use
@@ -516,6 +716,172 @@ That is a statement about the instrument as much as about the method, and it is
 the strongest argument yet for the metric work in
 [07-metric-roadmap.md](07-metric-roadmap.md): an LLM-as-judge with a clinical
 rubric would read these critiques as findings.
+
+### Experiment 4 — the corpus cannot agree with itself
+
+`qwen35-4b`, 100 held-out documents, 87-term frequency bank
+(`results/experiments/4399511/`). The hard-bank arms are reported below it.
+
+| arm | crit% | BLEU* | chrF* | TER* | terms/doc | adopted | adopted but absent from reference |
+|---|---|---|---|---|---|---|---|
+| `none` | 22.0% | 49.01 | 71.19 | 37.20 | 0 | — | — |
+| `glossary` | 19.0% | 46.85 | 69.69 | 38.42 | 9.3 | **90.6%** | 17.6% |
+| `distractor` | 17.0% | 45.75 | 68.57 | 39.80 | 9.3 | 8.5% | 48.1% |
+
+\* reference-based and contaminated: the terms were mined from this corpus'
+English side. See [the cost, stated first](#the-cost-stated-first).
+
+**The clinical layer is null, as the ceiling required.** Glossary moves 22 → 19
+documents, distractor moves it to 17, and the distractor is again the best arm.
+Paired on the same documents, glossary-only errors 4 against distractor-only 2,
+McNemar exact p = 0.688. Computed on this run's own baseline the reachable
+ceiling was 7 documents of 100 — 15 of the 22 error documents fail on numbers
+alone — so a 3-document movement inside a 7-document ceiling is exactly the
+"predicted null" the previous section registered, not a new finding.
+
+**Adoption was not the problem.** At 90.6% this is the highest adoption rate in
+the project, against RadLex's 80.8% and Wikidata's 86.0%. Mined terms *are*
+report register and the model takes them up more readily than ontology labels.
+That closes the loophole that would otherwise make every null here
+uninterpretable: the terms were used, and using them did not help.
+
+**And the register hypothesis turns out to explain almost none of it.** This was
+the experiment's actual question. If Experiment 1 failed because an ontology
+label is not the wording a radiologist writes, then a bank read off the reports
+themselves should drive the adopted-but-absent-from-reference rate toward zero.
+It went from 20.8% to **17.6%** — about three points. Roughly seventeen points
+survive mining the terminology out of the corpus that is scoring it.
+
+Those seventeen points are not a defect of the mining. They are the corpus
+disagreeing with itself. The largest single contributor is the term this
+experiment was most pleased to find:
+
+`Beurteilung` is a section header, so its rendering can be measured exactly
+rather than estimated: take the German section the classifier assigns the
+`impression` role, take the English section it assigns the same role, and read
+both literal headers. Across the 92 reports carrying that role on both sides:
+
+| `Beurteilung` is rendered | whole corpus (n=88) | held-out half (n=31) |
+|---|---|---|
+| *conclusion* | 50 (**57%**) | 16 (**52%**) |
+| *impression* | 32 (36%) | 14 (45%) |
+| *assessment* | 6 (7%) | 1 (3%) |
+
+`Beurteilung → conclusion` accounts for 39 of the orphaned adoptions on its own,
+and the mining chose correctly: *conclusion* is the modal form. It is still
+orphaned on **roughly half** the documents, because the corpus splits almost
+evenly between *conclusion* and *impression*. **No single term pair can exceed
+about 57% on this term**, whichever is chosen, so the mining did not err — a
+single right answer does not exist.
+
+Two other mined terms show the same pattern more mildly, counted by searching the
+aligned val sentence (these are not headers, so the exact method above does not
+apply): `Raumforderung → mass` against *mass* 8 / *lesion* 3, and
+`Thorax → thorax` against *thorax* 14 / *chest* 4.
+
+This also sharpens what RadLex got wrong. Its label for this concept was
+*assessment* — 7% of actual usage, the rarest of the three forms in play — while
+mining from the corpus yields *conclusion* at 57%. That gap is the register
+effect, and it is large per-term. What it buys in aggregate is small (20.8% →
+17.6%) only because both banks agree on the many terms that were never in doubt.
+
+This is not sloppiness in PARROT either. English radiology has no settled word
+for that heading, and **this project already encodes that fact**:
+[`data/sections.py`](../src/medmt_eval/data/sections.py) classifies
+`Impression | Assessment | Conclusion | Summary | Interpretation` as five surface
+forms of one section role, and `Beurteilung | Zusammenfassung | Fazit |
+Schlussfolgerung` as its German counterparts. One module in this repository
+treats them as interchangeable while the metric layer scores choosing among them
+as a terminology error. The section classifier was right.
+
+**What this does to the reference-based metrics.** Two readings, and the second
+matters more.
+
+The narrow one: injecting the mined glossary *lowered* BLEU against no glossary
+at all, 49.01 → 46.85, −2.16 sentence-level, paired bootstrap p = 0.018. That is
+in the teeth of the contamination, which biases this comparison *toward* the
+glossary — the terms were lifted from the same English text BLEU scores against,
+and the leakage still did not cover the cost of the prompt block. Against the
+distractor the mined terms are worth +1.10 BLEU (p = 0.11), so relevant terms do
+beat irrelevant ones, within noise. Compare Experiment 1's −4.01 against
+distractor: mining removes most of the ontology's surface penalty without buying
+anything clinical.
+
+The broad one is the more useful result of this experiment, and it is about the
+instrument rather than the intervention. If the corpus renders its most frequent
+term four ways, then BLEU, chrF++ and TER **cannot distinguish "wrong term" from
+"a correct synonym this particular reference did not use"** — and on the
+vocabulary a glossary targets, that ambiguity is the common case, not the edge
+case. A system writing *impression* is penalised against a reference writing
+*conclusion*, and both are what a radiologist writes. That is a measured argument
+for the direction in [07-metric-roadmap.md](07-metric-roadmap.md) — multiple
+references, or source-referenced judging that never needs the reference's word
+choice — and it is stronger than the arguments already recorded there because it
+is a number rather than a concern.
+
+#### The hard bank closes the loop
+
+The 28-term hard bank is the arm that was supposed to matter: the only terms with
+measurable headroom, at 29% baseline agreement against the freq bank's 68%.
+
+| arm | crit% | BLEU* | chrF* | TER* | terms/doc | adopted | adopted but absent from reference |
+|---|---|---|---|---|---|---|---|
+| `none` | 22.0% | 49.01 | 71.19 | 37.20 | 0 | — | — |
+| `glossary` | 20.0% | 46.78 | 69.26 | 38.95 | 3.7 | 83.4% | **43.6%** |
+| `distractor` | 19.0% | 46.90 | 69.58 | 39.53 | 3.7 | 10.4% | 82.1% |
+
+Two numbers finish the argument.
+
+**43.6% of adopted hard-bank terms are absent from the reference**, against 17.6%
+for the freq bank. The hand audit of this bank put its mining precision near 39%;
+the metric independently reports 56% of adoptions landing in the reference. Two
+unrelated estimates of the same defect agree, which is the strongest evidence
+available here that the audit was not just pessimism.
+
+**The hard terms are worth nothing over random ones: −0.12 BLEU against the
+distractor, paired bootstrap p = 0.45.** Compare +1.10 (p = 0.11) for the freq
+bank. The subset with headroom carries no measurable signal at all, while the
+subset that carries signal had no headroom. The anti-correlation predicted from
+the screening step is therefore not an artefact of how the banks were split — it
+survives end to end, in the arm comparison that was designed to isolate the terms
+from the prompt block.
+
+The clinical layer is null for a third time (22 → 20 documents, McNemar exact
+p = 1.000 against the distractor), as the ceiling required, and the distractor is
+again nominally the best arm.
+
+So the two banks bracket a trade-off with no useful point on it:
+
+| | freq bank | hard bank |
+|---|---|---|
+| terms | 87 | 28 |
+| baselines already produce them | 68% | 29% |
+| mining precision (audit) | ~92% | ~39% |
+| adopted but absent from reference | 17.6% | 43.6% |
+| BLEU* vs distractor | +1.10 (p = 0.11) | −0.12 (p = 0.45) |
+| critical errors vs distractor | p = 0.688 | p = 1.000 |
+
+**A determinism check, obtained for free.** Each bank re-translated the same 100
+documents for its own `none` arm, so the run contains two independent executions
+of an identical configuration at temperature 0. All **100 of 100 outputs are
+byte-identical**. That was not designed as a check and is the reason to record it:
+the paired tests above assume the pipeline is deterministic, and this run
+demonstrates it rather than assuming it. The redundant arm cost 67 GPU-minutes;
+next time `--arms glossary distractor` plus one shared baseline would save that,
+at the cost of this evidence.
+
+**A measurement error worth recording, because it inverted a conclusion.** The
+`Beurteilung` row above was first computed by searching each aligned val sentence
+for candidate words, which returned *impression* 13, *conclusion* 10, *findings*
+9, *assessment* 7 and a "33% ceiling". That was wrong in a specific way: a report
+contains a `Findings:` header *and* an impression header, so scanning the whole
+sentence neighbourhood counted another section's header as a rendering of this
+one. *findings* and *evaluation* are not renderings of `Beurteilung` at all. The
+header-aligned count above supersedes it, and it moves the ceiling from 33% to
+about 57% — the argument survives, the number did not. The general lesson is the
+one already in [04-experiments.md](04-experiments.md): a loose proxy that happens
+to support the expected conclusion is the most dangerous kind, and this one was
+caught only by measuring it a second way on purpose.
 
 ### Limits
 

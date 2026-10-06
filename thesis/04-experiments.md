@@ -24,6 +24,18 @@ personas and disjoint glossary slices, two rounds plus synthesis, 20 reports.
 glossary corrects → radiologist without the glossary arbitrates), every stage
 scored separately, 40 reports.
 
+**Mined glossary** — PARROT split 196 train / 100 val by document, stratified by
+modality (seed 20260928). Two banks mined from the train half by sentence-level
+Dice alignment with mutual-best filtering — 87 terms by frequency, and the 28 of
+them the baselines get right at most 60% of the time — each run against the same
+three arms on the held-out half. `results/experiments/4399511/`. See
+[09](09-experiments-glossary-debate.md).
+
+**DeepL** — the commercial baseline, added 2026-09-29. Single pass over PARROT-DE
+(296 reports) and the same ten-cycle, 20-report round trip as every other system.
+EMEA and HimL were not run. `results/deepl_20260929_134803/`. See
+[05](05-results.md#finding-6--deepl-is-competitive-on-the-words-and-unstable-under-repetition).
+
 **COMET** — `Unbabel/wmt22-comet-da` over all thirteen systems' existing
 single-pass outputs. No retranslation. See [07](07-metric-roadmap.md).
 
@@ -52,6 +64,9 @@ Round-trip wall time (20 passes × 20 reports):
 | `translategemma-27b` | 92 min | 1×80 GB, batch 4 |
 | `hymt2-30b-a3b` | 137 min | 2×80 GB, batch 8 |
 | `DeepSeek-V4-Flash` | 189 min | API (no GPU) |
+
+DeepL used no GPU: 254 s for the single pass and 252 s for the round trip on the login
+node, 530,862 of the free plan's 1,000,000 monthly characters.
 
 Moving the 27 B models from 2×40 GB (batch 1, weights sharded) to 1×80 GB (batch 4) cut
 `qwen35-27b` from an estimated 2.4 h to 46 min, and a single-GPU request also schedules
@@ -112,6 +127,12 @@ to do with COMET. Upgrading back breaks COMET instead — its XLM-R encoder unpa
 a three-tuple that transformers 5.x no longer returns. They are mutually
 exclusive; COMET now lives in `.venv-comet`.
 
+Isolating it surfaced one more layer: the fresh venv's `setuptools` 84 no longer
+ships `pkg_resources`, which COMET still imports, and `pip install setuptools`
+reported the requirement already satisfied. Pinning `setuptools<81` fixed it. The
+diagnostic lesson is the same as the transformers one — a package manager saying
+"satisfied" is a statement about versions, not about whether an import works.
+
 This one is worth dwelling on because the misdiagnosis was instructive. The
 symptom was a model failing *only* in the cascade, where Hy-MT2 loads before
 Qwen, and not in the debate, where Qwen loads first. That is a perfectly coherent
@@ -158,6 +179,36 @@ length jumped from 769 to 3,446 characters. And the guard that would have caught
 it had been written into a different module an hour earlier and not carried
 across. The fix reorders the reply format so truncation costs the optional field,
 and reports `parse_failures` per stage.
+
+**Two score sets that could not be compared (DeepL, 2026-09-29).** The first
+comparison table put DeepL's terminology-failure rate at 2.0% against 17–24% for every
+other system, which looked like a large win. It was an artefact. The stored findings for
+the twelve older systems were produced by an earlier version of the terminology detector;
+DeepL had just been scored by the current one. One term, `Lymphknoten`, accounted for
+almost all of it: about 50 flags for every older system and none for DeepL, even though
+DeepL wrote "lymph nodes" as often as they did. Rescoring `glm-5.2`'s stored outputs with
+current code took its terminology flags from 52 documents to 4, and `qwen35-4b`'s from 55
+to 22.
+
+What made this tractable was checking the *critical* rate too: it is identical under
+both detector versions for all thirteen systems, so nothing published on negation,
+laterality or numbers moves. Only the terminology findings, which are `major` and add
+nothing to the critical rate, changed. All systems were rescored into a new directory,
+`results/parrot_de/rescored_20260929/`, and every comparison in this chapter reads from
+it. The `terminology_error_rate` column of the stored leaderboard is stale and was left
+in place. **A fresh score set must never be compared to stored findings.**
+
+**`consolidated/` is missing a system.** `results/parrot_de/consolidated/` holds twelve
+files including the control, but the round-trip and published tables have thirteen.
+`translategemma-27b` is in `results/parrot_3942876/`. A comparison built from
+`consolidated/` alone silently left it out and mis-ranked DeepL by one place.
+
+**A claim I made without measuring it.** After the DeepL run I described laterality as
+its weak spot, "the failure the other systems mostly avoid". The per-system breakdown
+says otherwise: DeepL flips laterality in 5.7% of documents, tied with `MiniMax-M3` and
+mid-table (`DeepSeek-V4-Flash` 3.7%, `qwen35-27b` 12.5%). The only real difference from
+the leaders is negation (1.4% against 0.3%), which is four documents against one and
+cannot be interpreted.
 
 ## Verification practices adopted
 

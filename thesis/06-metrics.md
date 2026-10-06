@@ -241,8 +241,9 @@ Derived quantities used in the results:
 front-loaded share  = (BLEU_c1 − BLEU_c2) / (BLEU_c1 − BLEU_c10)   (how much went in cycle 1)
 ```
 
-The front-loaded share averages 77% across the twelve systems, which is the evidence for
-the convergence claim in [05-results.md](05-results.md).
+The front-loaded share averages 77% across the twelve systems (76% with DeepL, the slowest
+to settle at 63%), which is the evidence for the convergence claim in
+[05-results.md](05-results.md).
 
 ---
 
@@ -272,10 +273,27 @@ off-distribution here: trained on WMT news, applied to radiology reports, and
 learned metrics are documented to degrade outside their training domain
 ([arXiv:2402.18747](https://arxiv.org/abs/2402.18747)).
 
+The failure is visible at the level of a single segment, using the same sentence
+as §0:
+
+| source → candidate | COMET |
+|---|---|
+| "Kein Pleuraerguss." → "No pleural effusion." ✅ | 0.9809 |
+| "Ein 5 mm Knoten links." → "A 5 mm nodule on the left." ✅ | 0.9702 |
+| **"Kein Pleuraerguss." → "Pleural effusion."** ❌ negation dropped | **0.9110** |
+
+Inverting the finding — the patient now *has* the effusion the source rules out —
+costs COMET seven hundredths and still scores 0.91. BLEU charged the identical
+error 15.5 points (§0). The metric designed to capture semantic adequacy
+reproduces BLEU's blind spot rather than fixing it, which is the cleanest single
+demonstration that the problem is not n-gram matching.
+
 **Operational note.** `unbabel-comet` 2.2.7 requires `transformers` 4.x and
 cannot share this project's environment; it lives in `.venv-comet`. Installing it
 into the main venv downgraded transformers and broke `Qwen3.5` loading for
-unrelated jobs.
+unrelated jobs. The isolated venv also needs `setuptools<81`: setuptools 81+
+**removed** `pkg_resources`, which COMET 2.2.7 still imports — so `pip install
+setuptools` reports "already satisfied" while the import keeps failing.
 
 ## 5. LLM-as-judge with a clinical rubric
 

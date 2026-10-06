@@ -17,6 +17,7 @@ none are transcribed by hand.
 | `qwen35-4b` | 56.30 | 49.04 | 47.77 | −8.53 | 75.82 | 70.90 | 40 → 45 | 55 → 55 |
 | `MiniMax-M3` ☁ | 56.17 | 52.81 | 52.41 | −3.76 | 75.82 | 74.18 | **30** → 40 | **30** → 35 |
 | `glm-5.2` ☁ | 55.07 | 52.50 | 49.40 | −5.67 | 75.39 | 72.55 | 40 → 40 | **30** → **30** |
+| `deepl` ☁ | 52.73 | 45.97 | 41.95 | −10.78 | 72.93 | 67.34 | 30 → 45 | 35 → 45 |
 | `hymt2-30b-a3b` | 50.08 | 35.75 | 33.54 | −16.54 | 72.90 | 63.30 | 45 → 50 | 40 → 45 |
 | `translategemma-4b` | 47.90 | 35.40 | 32.18 | −15.72 | 69.53 | 59.24 | 25 → 35 | 40 → 45 |
 | `hymt2-7b` | 45.39 | 36.79 | 35.79 | −9.60 | 69.65 | 62.71 | 45 → 50 | 45 → 50 |
@@ -59,17 +60,24 @@ errors. Full table in [07-metric-roadmap.md](07-metric-roadmap.md).
 ![Round-trip curves](../figures/fig1_roundtrip_curves.png)
 
 The shape is the same in all twelve panels: a cliff between cycle 1 and cycle 2, then a
-plateau. Averaged over the systems, **77% of all BLEU lost across ten round trips is
-lost in the first one**. By cycle 5 most systems have stopped changing entirely —
+plateau. (The figure was generated before DeepL was run and shows twelve systems; DeepL
+is in the tables.) Averaged over those twelve, **77% of all BLEU lost across ten round
+trips is lost in the first one**; with DeepL it is 76%. By cycle 5 most systems have stopped changing entirely —
 `hymt2-7b` is bit-identical from cycle 7 onward.
 
 Translation converges to a fixed point rather than decaying without bound. The
 practical implication is that round-trip degradation is a *property measurable in one
 cycle*; ten cycles were needed to establish that, but not to use it.
 
-Critical errors behave the same way. Five of twelve systems gain ≤5 points across all
-ten cycles, and the two that move most (`opus` +20, `nllb` +15) are the two weakest
-translators. The level, not the slope, is the story.
+Critical errors behave the same way. Seven of the twelve systems in the figure gain ≤5
+points on DE→EN across all ten cycles (an earlier draft said five; it does not
+reproduce from the data), and the systems that move most (`opus` +20, `nllb` +15,
+DeepL +15) are mostly the weakest translators. The level, not the slope, is the story.
+
+**DeepL is the one exception to "converges" in degree.** It loses 10.8 BLEU over ten
+cycles, and only 63% of that in the first; it loses **4.0 more after cycle 2**, the most
+of any system (next: `translategemma-4b`, 3.2). It does flatten (42.2, 41.8, 41.9 over
+the last three cycles), so "fixed point" still holds, but it is reached late.
 
 ## Finding 3 — round-trip stability is an independent axis
 
@@ -86,6 +94,7 @@ translators. The level, not the slope, is the story.
 | `qwen35-4b` | −8.53 | 85% |
 | `nllb` | −8.61 | 79% |
 | `hymt2-7b` | −9.60 | 90% |
+| `deepl` ☁ | −10.78 | 63% |
 | `translategemma-27b` | −12.25 | 78% |
 | `translategemma-4b` | −15.72 | 80% |
 | `hymt2-30b-a3b` | −16.54 | 87% |
@@ -130,6 +139,69 @@ open-class recall instrument.
 
 ---
 
+## Finding 6 — DeepL is competitive on the words and unstable under repetition
+
+The commercial baseline, added 2026-09-29 and run on the free API plan
+([02-models.md](02-models.md#deepl)). All 296 reports, scored with **one** detector
+version across all thirteen systems (see [04-experiments.md](04-experiments.md) for why
+that matters). **words%** is the share of documents with a critical *negation* or
+*laterality* finding; number and measurement findings, which are two thirds of all
+critical findings on this corpus, are shown separately and excluded from it.
+
+| System | words% | numbers% | all-crit% | term% | BLEU | chrF++ | TER |
+|---|---|---|---|---|---|---|---|
+| `DeepSeek-V4-Flash` ☁ | 4.1 | 17.2 | 19.9 | 1.4 | 53.7 | 74.7 | 33.3 |
+| `glm-5.2` ☁ | 4.7 | 15.9 | 19.3 | 1.4 | 51.3 | 73.4 | 34.8 |
+| `MiniMax-M3` ☁ | 6.1 | 16.6 | 21.3 | 1.7 | 53.5 | 74.8 | 33.5 |
+| `translategemma-4b` | 6.1 | 17.9 | 23.0 | 2.7 | 44.7 | 68.0 | 45.2 |
+| `translategemma-27b` | 6.4 | 18.9 | 23.6 | 1.4 | 55.0 | 75.8 | 34.9 |
+| **`deepl`** ☁ | **6.8** | 20.6 | 25.7 | 2.0 | 52.7 | 73.8 | 36.2 |
+| `hymt2-1.8b` | 7.4 | 19.6 | 25.3 | 2.0 | 39.1 | 64.2 | 49.0 |
+| `hymt2-7b` | 8.1 | 18.6 | 24.3 | 2.7 | 46.0 | 69.2 | 42.8 |
+| `hymt2-30b-a3b` | 9.8 | 25.7 | 31.1 | 3.0 | 47.7 | 71.2 | 41.8 |
+| `qwen35-4b` | 11.8 | 20.3 | 24.7 | 7.4 | 48.0 | 69.0 | 40.9 |
+| `qwen35-27b` | 13.9 | 24.0 | 28.4 | 8.1 | 51.7 | 70.4 | 38.2 |
+| `nllb` | 19.9 | 25.3 | 33.4 | 17.9 | 21.8 | 46.6 | 65.0 |
+| `opus` | 20.6 | 18.2 | 26.7 | 12.2 | 24.6 | 49.0 | 61.4 |
+
+DeepL is **sixth of thirteen on the words** and fourth on BLEU (per-document mean).
+Ranked by all-crit it drops to ninth, because its number-finding rate is the fifth
+highest; that is only partly a typographic artefact (below), which is why the words-only
+column exists.
+
+- **The words-only ranking differs from the standard one, and in a useful direction.**
+  `opus` looks middling on all-crit (26.7%) but is the *worst* system on the words
+  (20.6%). It emits fewer numbers, so it has fewer to get wrong — the under-translation
+  bias of Finding 5, visible from the other side.
+- **DeepL is unremarkable on laterality and negation.** Laterality: 5.7% of documents,
+  tied with `MiniMax-M3`, better than the seven weakest systems. Negation: 1.4%
+  (four documents) against 0.3% (one) for the three hosted LLMs. At this sample size that
+  is not a difference.
+- **Terminology is not a DeepL strength.** After the detector-version correction its
+  2.0% sits in the ordinary 1.4–3.0% band of the good systems.
+- **Round trip: the weakness.** −10.78 BLEU over ten cycles against −3.8 to −5.7 for the
+  best hosted LLMs, and the slowest to settle (Finding 2). Its critical rate goes
+  30% → 45% DE→EN, which at n = 20 is three documents.
+- **It has no COMET score**, nor does `translategemma-27b`; the COMET run predates both.
+
+**The `5-mm` artefact, measured.** DeepL writes a hyphenated unit for compound
+modifiers ("a 5-mm nodule"), and the number detector's measurement pattern requires
+whitespace between value and unit, so it reads the hyphenated form as a mismatch
+against the source's `5 mm` — the same code it gives a genuine `15 mm` error.
+Normalising the hyphen and re-scoring: DeepL emits it in **5 of 296 reports**, and
+doing so clears **2** critical documents (25.68% → 25.00%). `hymt2-30b-a3b` is the only
+other system affected (−0.34 points). The effect is real but small; it was described
+as "probably inflated" before being measured, which overstated it. The detector
+was **not** changed, because altering the shared instrument would revalue the whole
+benchmark.
+
+**What this does to the founding question.** The strongest commercial baseline lands in
+the middle of the field on the words, well behind the leading hosted LLMs, and is less
+stable than any of them under repetition. That neither answers "does it need a
+specialised model" nor supports "commercial MT is enough". It does mean the ~1-in-5
+document-level failure rate is not a property of open models: it is what the best
+available systems, commercial or not, produce on this corpus.
+
 ## Answering the question
 
 **Does German↔English medical translation need a specialised model?**
@@ -170,7 +242,7 @@ The honest next step is the metric work in
 [07-metric-roadmap.md](07-metric-roadmap.md) — a learned semantic metric, an open-class
 error finder, and a small human-MQM validation set — and only then a decision about
 model building. Steps 1–3 of that roadmap need no new translations and no new
-annotation; all thirteen systems' outputs are already on disk.
+annotation; all fourteen systems' outputs are already on disk.
 
 ## Threats to validity
 
@@ -183,5 +255,11 @@ annotation; all thirteen systems' outputs are already on disk.
   data, and may be cleaner than production dictation.
 - **Detector precision and recall** — quantified where possible, unbounded where not.
   See [06-metrics.md](06-metrics.md) §2.3.
+- **DeepL is a single dated run on an unversioned service.** No model id is exposed, so
+  it cannot be re-run to the same result later, and it was run once.
+- **Score sets from different dates are not comparable.** The terminology detector
+  changed after the July runs; see [04-experiments.md](04-experiments.md). The published
+  critical rates are unaffected, but any terminology figure from the stored leaderboard
+  is stale.
 - **No human validation yet.** Nothing in this chapter has been checked by a clinician.
   That is the single largest gap.

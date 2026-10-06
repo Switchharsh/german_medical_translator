@@ -16,6 +16,7 @@
 8. [Metric roadmap: what else should be measured, and in what order](#8-metric-roadmap-what-else-should-be-measured-and-in-what-order)
 9. [Terminology: which dictionary, and what it costs to get it wrong](#9-terminology-which-dictionary-and-what-it-costs-to-get-it-wrong)
 10. [Experiments: dictionary injection, debate, and a review cascade](#10-experiments-dictionary-injection-debate-and-a-review-cascade)
+11. [Configurations and protocols](#11-configurations-and-protocols)
 
 ---
 
@@ -65,10 +66,18 @@ truth, not a model agreeing with itself.
   n-gram matching. See [8. Metric roadmap: what else should be measured, and in what order](#8-metric-roadmap-what-else-should-be-measured-and-in-what-order).
 - **Degradation is front-loaded and converges.** 77% of all BLEU lost across ten
   round trips is lost in the *first* one; after cycle 2 the text reaches a fixed
-  point rather than decaying without bound. True of all twelve systems.
+  point rather than decaying without bound. True of all twelve systems in the figure;
+  DeepL, added later, is the slowest to settle (63% in the first cycle, and 4.0 BLEU more
+  lost after cycle 2 than any other system).
 - **Round-trip stability is a separate axis from single-pass quality.**
   `translategemma-27b` ties `qwen35-27b` on one pass (57.1 vs 57.6) and loses
   12.3 BLEU round-tripping against qwen's 5.0.
+- **The commercial baseline does not change this.** DeepL, on the free API plan, is
+  sixth of thirteen on negation and laterality (6.8% of documents), fourth on BLEU, and
+  less stable under ten round trips than any of the three leading hosted LLMs (−10.8
+  BLEU against −3.8 to −5.7). Ranked on the words alone the order differs from the
+  standard one: `opus` is the worst system, not a middling one, because it emits fewer
+  numbers to get wrong. See [6. Results](#6-results).
 - **Every system fails often.** The best single-pass critical-error rate among
   high-quality systems is 30% of reports. That is the finding that matters for
   the original question.
@@ -78,7 +87,7 @@ truth, not a model agreeing with itself.
 - **Injecting a dictionary does not help, and a *bigger* dictionary hurts.** With
   a 47,997-entry RadLex bank the relevant glossary scored *below* an
   equally-sized block of irrelevant terms on every metric. The mechanism is
-  measurable: 26% of injected terms the model adopted are terms the human
+  measurable: 21% of injected terms the model adopted are terms the human
   reference does not use, because an ontology's preferred label is not report
   register. Only the distractor control makes this visible.
 - **A three-model debate improved fluency and not safety** — and on the
@@ -94,6 +103,32 @@ truth, not a model agreeing with itself.
   2,777 validated clinical findings — and that smallest bank produced the only
   directional clinical improvement seen in the project (11.9% vs a 12.8% control,
   p = 0.250, not significant).
+- **A glossary mined from the corpus itself does not rescue it either, and shows
+  why.** Terms mined from PARROT's own training half are adopted at 90.6%, the
+  highest rate in the project — so the terms are report register and the model
+  does take them. But the share of adopted terms the reference does not use falls
+  only from 20.8% to 17.6%. The residue is **the corpus disagreeing with
+  itself**: `Beurteilung` is rendered *conclusion* 57% of the time, *impression*
+  36% and *assessment* 7%, so even the best possible single term pair is wrong on
+  four reports in ten. Register mismatch explains about three points of the
+  original failure in aggregate; roughly seventeen are irreducible reference
+  variance.
+- **Useful terms and improvable terms are disjoint sets.** Screening the mined
+  pairs against what the baselines already produce splits them cleanly and
+  oppositely: the 59 terms the models get right anyway are ~92% correctly mined,
+  while the 28 with real headroom are only ~39% correctly mined and inject
+  non-reference wording 43.6% of the time. In the arm comparison that isolates
+  the terms from the prompt block, the headroom bank is worth **−0.12 BLEU
+  against randomly chosen irrelevant terms** (p = 0.45) — no signal at all. A
+  term with a stable one-to-one rendering is easy for the aligner *and* easy for
+  the model, for the same reason; a term the model gets wrong is context-dependent,
+  and a context-free glossary entry cannot express it.
+- **Most of the failures are unreachable by construction, and this is now
+  computed rather than asserted.** On the held-out 100 documents, 15 of the 22
+  documents carrying a critical error fail on numbers alone, and the rest are
+  mostly *dropped* laterality — an omission a term pair cannot repair. The
+  reachable ceiling for any terminology intervention is 7 documents in 100. The
+  run of null results is what that ceiling predicts.
 
 Full numbers in [6. Results](#6-results).
 
@@ -102,7 +137,7 @@ Full numbers in [6. Results](#6-results).
 | File | Contents |
 |---|---|
 | [2. Datasets](#2-datasets) | Corpora, why PARROT, licensing and provenance |
-| [3. Systems under test](#3-systems-under-test) | The thirteen systems and how each is run |
+| [3. Systems under test](#3-systems-under-test) | The fourteen entries (thirteen systems and a control) and how each is run |
 | [4. Methods](#4-methods) | Two-layer evaluation, chunking, round-trip design |
 | [5. Experiments](#5-experiments) | What was run, on what hardware, what failed |
 | [6. Results](#6-results) | Scores, figures, interpretation |
@@ -113,7 +148,7 @@ Full numbers in [6. Results](#6-results).
 
 ### Status
 
-**2026-08-22.** All thirteen systems have completed the single-pass benchmark and
+**2026-09-29.** All thirteen systems have completed the single-pass benchmark and
 the ten-cycle round-trip. Figures generated. Beyond that:
 
 | Work | State |
@@ -127,26 +162,40 @@ the ten-cycle round-trip. Figures generated. Beyond that:
 | Experiments 1 and 2 on the medical-text corpus | done — [09](#10-experiments-dictionary-injection-debate-and-a-review-cascade) |
 | COMET over all systems | done — [07](#8-metric-roadmap-what-else-should-be-measured-and-in-what-order) |
 | LLM-as-judge with a clinical rubric | implemented, not yet run at scale |
-| DeepL baseline | **not started** — [07](#8-metric-roadmap-what-else-should-be-measured-and-in-what-order) |
+| Experiment 4, glossary mined from the corpus (train/val split) | done — [09](#10-experiments-dictionary-injection-debate-and-a-review-cascade) |
+| DeepL baseline (single pass + round trip) | done 2026-09-29 — [05](#6-results), [07](#8-metric-roadmap-what-else-should-be-measured-and-in-what-order) |
+| DeepL glossary arm | **not started**; free-plan glossary creation untested — [07](#8-metric-roadmap-what-else-should-be-measured-and-in-what-order) |
 | Human MQM validation | not started; the binding constraint is clinician time |
 
 **No model has been fine-tuned, and on the current evidence none should be yet.**
-Six interventions have now been tried — a small dictionary, a large one, a
-validated small one, a three-agent debate, a three-stage cascade, and restricting
-the corpus to medical text only. **Not one produced a statistically significant
-improvement in clinical error rate.** Several made it worse.
+Seven interventions have now been tried — a small dictionary, a large one, a
+validated small one, one mined from the corpus' own training half, a three-agent
+debate, a three-stage cascade, and restricting the corpus to medical text only.
+**Not one produced a statistically significant improvement in clinical error
+rate.** Several made it worse.
 
-That is not evidence the problem is unfixable. It is evidence of two things:
-the failures are concentrated in numbers and measurements, where terminology and
-committee methods cannot reach by construction; and the instrument may not be
-able to see the fixes that do exist — the debate transcripts contain correct,
-specific catches (`NBKS`, `LWK`) that no detector can score.
+That is not evidence the problem is unfixable, and as of Experiment 4 it is no
+longer even a surprise. Three things are now measured rather than suspected:
+
+- **The reachable headroom is 7 documents in 100.** Two thirds of the critical
+  errors are numeric, which no terminology or committee method touches; most of
+  the remainder are omissions. A null was the arithmetically predicted outcome.
+- **The reference cannot adjudicate the interventions that remain.** Where the
+  corpus renders one German term four ways, a single-reference lexical metric
+  cannot separate a wrong term from a correct synonym, so part of the measured
+  "cost" of every glossary was the metric, not the translation.
+- **The instrument cannot see the fixes that do exist** — the debate transcripts
+  contain correct, specific catches (`NBKS`, `LWK`) that no detector can score.
+
+The first of those bounds the value of further intervention work on this corpus;
+the second and third say the next real progress is in measurement.
 
 The honest next step remains the metric work in
 [8. Metric roadmap: what else should be measured, and in what order](#8-metric-roadmap-what-else-should-be-measured-and-in-what-order), and the single most informative
-missing experiment is **DeepL** — because it applies glossaries inside the
-decoder rather than as a prompt instruction, and so separates "dictionaries do
-not help" from "*prompt-injected* dictionaries do not help".
+missing experiment is now the **DeepL glossary arm** — because DeepL applies glossaries
+inside the decoder rather than as a prompt instruction, and so separates "dictionaries do
+not help" from "*prompt-injected* dictionaries do not help". The DeepL *benchmark* is
+done; this is the half of the DeepL question that remains.
 
 ## 2. Datasets
 
@@ -309,7 +358,7 @@ translation errors.
 
 ## 3. Systems under test
 
-Thirteen entries: twelve translation systems plus a control.
+Fourteen entries: thirteen translation systems plus a control.
 
 | Name | Model ID | Class | Params | Adapter |
 |---|---|---|---|---|
@@ -326,10 +375,12 @@ Thirteen entries: twelve translation systems plus a control.
 | `glm-5.2` | `z-ai/glm-5.2` | Hosted frontier LLM | — | `openai-compat` |
 | `DeepSeek-V4-Flash` | `deepseek-ai/deepseek-v4-flash-0731` | Hosted frontier LLM | — | `openai-compat` |
 | `MiniMax-M3` | `minimaxai/minimax-m3` | Hosted frontier LLM | — | `openai-compat` |
+| `deepl` | none disclosed | Commercial neural MT, free API plan | — | `deepl` |
 
 The set spans the four hypotheses worth testing: a small dedicated bilingual model, a
 massively multilingual one, purpose-built translation LLMs, and general-purpose LLMs
-prompted to translate — local and hosted.
+prompted to translate — local and hosted. DeepL, added last (2026-09-29), is the fifth: the
+commercial system a German hospital would actually reach for.
 
 ### The control
 
@@ -372,6 +423,38 @@ addressed the wrong cause.
 **MoE weight storage ≠ compute.** `Hy-MT2-30B-A3B` activates ~3 B parameters but must
 *hold* ~60 GB of weights, so it needs 2×80 GB despite being cheap to run. Sizing it by
 active parameters would have failed to load.
+
+### DeepL
+
+DeepL is the one system here with no model identifier. The service does not disclose
+which model answers, so nothing can be pinned and the result is a dated measurement
+(2026-09-29), not a reproducible artefact. Rerunning it next year may give different
+numbers.
+
+Four things the adapter
+([`models/deepl_mt.py`](src/medmt_eval/models/deepl_mt.py)) has to get right, three
+of which it originally got wrong:
+
+- **Where it runs.** DeepL is reachable only over the internet, and the GPU nodes have no
+  outbound network, so it runs on the login node
+  ([`scripts/deepl/run_deepl.sh`](scripts/deepl/run_deepl.sh)). The work is I/O-bound:
+  the whole 296-report benchmark took 254 s.
+- **The key variable.** The adapter read `DEEPL_AUTH_KEY`; the project's `.env` defines
+  `DEEPL_API_KEY`. The adapter would have refused to start with a valid key. It now
+  accepts either.
+- **The endpoint follows the key.** Free-plan keys end in `:fx` and are valid only on
+  `api-free.deepl.com`. The adapter previously chose the host from a flag, and a wrong
+  flag produces a 403 that reads like a bad key.
+- **The English target is pinned to `EN-US`.** Bare `EN` is deprecated. It currently
+  returns US spelling, checked directly and identical to `EN-US`, and PARROT's references
+  are US-spelled (78 US tokens, 0 UK). But what a deprecated alias means is DeepL's to
+  change.
+
+Failure handling follows the lesson of the hosted gateway: HTTP 429 and 5xx back off and
+retry; **456 (monthly quota exhausted) is fatal**, because retrying cannot help. The free
+plan allows 1,000,000 characters a month (read from `/v2/usage`; an earlier draft of the
+roadmap said 500,000). The run script refuses to start if the projected spend exceeds
+95% of what remains.
 
 ### Hosted models: the substitution guard
 
@@ -539,6 +622,19 @@ The rule adopted here: **terminology comes from sources external to the
 evaluation corpus** (RadLex, Wikidata), and the corpus is used to *measure*
 terminology, never to *generate* it.
 
+**One deliberate exception, run as an experiment.**
+[Experiment 4](#10-experiments-dictionary-injection-debate-and-a-review-cascade)
+mines a glossary from PARROT on purpose, because Experiment 1's failure was
+traced to register — an ontology's preferred label is not the wording a
+radiologist writes — and the only available source of report register is the
+reports. It is run under the constraints this section implies rather than in
+spite of them: a document-level train/val split so no scored document
+contributed a term, the source-referenced detectors as the primary read, and
+every reference-based score labelled contaminated. What the split buys is
+narrower than it looks — it removes direct memorisation and leaves house-style
+leakage intact — so the experiment's reference-based numbers are reported as an
+upper bound that cannot be cleaned up, not as a result.
+
 Two places where that line was approached and should be stated plainly:
 
 - **Branch selection.** RadLex branches were first filtered by a ≥70% measured
@@ -611,6 +707,18 @@ personas and disjoint glossary slices, two rounds plus synthesis, 20 reports.
 glossary corrects → radiologist without the glossary arbitrates), every stage
 scored separately, 40 reports.
 
+**Mined glossary** — PARROT split 196 train / 100 val by document, stratified by
+modality (seed 20260928). Two banks mined from the train half by sentence-level
+Dice alignment with mutual-best filtering — 87 terms by frequency, and the 28 of
+them the baselines get right at most 60% of the time — each run against the same
+three arms on the held-out half. `results/experiments/4399511/`. See
+[09](#10-experiments-dictionary-injection-debate-and-a-review-cascade).
+
+**DeepL** — the commercial baseline, added 2026-09-29. Single pass over PARROT-DE
+(296 reports) and the same ten-cycle, 20-report round trip as every other system.
+EMEA and HimL were not run. `results/deepl_20260929_134803/`. See
+[05](#6-results).
+
 **COMET** — `Unbabel/wmt22-comet-da` over all thirteen systems' existing
 single-pass outputs. No retranslation. See [07](#8-metric-roadmap-what-else-should-be-measured-and-in-what-order).
 
@@ -639,6 +747,9 @@ Round-trip wall time (20 passes × 20 reports):
 | `translategemma-27b` | 92 min | 1×80 GB, batch 4 |
 | `hymt2-30b-a3b` | 137 min | 2×80 GB, batch 8 |
 | `DeepSeek-V4-Flash` | 189 min | API (no GPU) |
+
+DeepL used no GPU: 254 s for the single pass and 252 s for the round trip on the login
+node, 530,862 of the free plan's 1,000,000 monthly characters.
 
 Moving the 27 B models from 2×40 GB (batch 1, weights sharded) to 1×80 GB (batch 4) cut
 `qwen35-27b` from an estimated 2.4 h to 46 min, and a single-GPU request also schedules
@@ -699,6 +810,12 @@ to do with COMET. Upgrading back breaks COMET instead — its XLM-R encoder unpa
 a three-tuple that transformers 5.x no longer returns. They are mutually
 exclusive; COMET now lives in `.venv-comet`.
 
+Isolating it surfaced one more layer: the fresh venv's `setuptools` 84 no longer
+ships `pkg_resources`, which COMET still imports, and `pip install setuptools`
+reported the requirement already satisfied. Pinning `setuptools<81` fixed it. The
+diagnostic lesson is the same as the transformers one — a package manager saying
+"satisfied" is a statement about versions, not about whether an import works.
+
 This one is worth dwelling on because the misdiagnosis was instructive. The
 symptom was a model failing *only* in the cascade, where Hy-MT2 loads before
 Qwen, and not in the debate, where Qwen loads first. That is a perfectly coherent
@@ -746,6 +863,36 @@ it had been written into a different module an hour earlier and not carried
 across. The fix reorders the reply format so truncation costs the optional field,
 and reports `parse_failures` per stage.
 
+**Two score sets that could not be compared (DeepL, 2026-09-29).** The first
+comparison table put DeepL's terminology-failure rate at 2.0% against 17–24% for every
+other system, which looked like a large win. It was an artefact. The stored findings for
+the twelve older systems were produced by an earlier version of the terminology detector;
+DeepL had just been scored by the current one. One term, `Lymphknoten`, accounted for
+almost all of it: about 50 flags for every older system and none for DeepL, even though
+DeepL wrote "lymph nodes" as often as they did. Rescoring `glm-5.2`'s stored outputs with
+current code took its terminology flags from 52 documents to 4, and `qwen35-4b`'s from 55
+to 22.
+
+What made this tractable was checking the *critical* rate too: it is identical under
+both detector versions for all thirteen systems, so nothing published on negation,
+laterality or numbers moves. Only the terminology findings, which are `major` and add
+nothing to the critical rate, changed. All systems were rescored into a new directory,
+`results/parrot_de/rescored_20260929/`, and every comparison in this chapter reads from
+it. The `terminology_error_rate` column of the stored leaderboard is stale and was left
+in place. **A fresh score set must never be compared to stored findings.**
+
+**`consolidated/` is missing a system.** `results/parrot_de/consolidated/` holds twelve
+files including the control, but the round-trip and published tables have thirteen.
+`translategemma-27b` is in `results/parrot_3942876/`. A comparison built from
+`consolidated/` alone silently left it out and mis-ranked DeepL by one place.
+
+**A claim I made without measuring it.** After the DeepL run I described laterality as
+its weak spot, "the failure the other systems mostly avoid". The per-system breakdown
+says otherwise: DeepL flips laterality in 5.7% of documents, tied with `MiniMax-M3` and
+mid-table (`DeepSeek-V4-Flash` 3.7%, `qwen35-27b` 12.5%). The only real difference from
+the leaders is negation (1.4% against 0.3%), which is four documents against one and
+cannot be interpreted.
+
 ### Verification practices adopted
 
 - **Preflight everything.** Credentials, gated-repo access, API reachability,
@@ -784,6 +931,7 @@ none are transcribed by hand.
 | `qwen35-4b` | 56.30 | 49.04 | 47.77 | −8.53 | 75.82 | 70.90 | 40 → 45 | 55 → 55 |
 | `MiniMax-M3` ☁ | 56.17 | 52.81 | 52.41 | −3.76 | 75.82 | 74.18 | **30** → 40 | **30** → 35 |
 | `glm-5.2` ☁ | 55.07 | 52.50 | 49.40 | −5.67 | 75.39 | 72.55 | 40 → 40 | **30** → **30** |
+| `deepl` ☁ | 52.73 | 45.97 | 41.95 | −10.78 | 72.93 | 67.34 | 30 → 45 | 35 → 45 |
 | `hymt2-30b-a3b` | 50.08 | 35.75 | 33.54 | −16.54 | 72.90 | 63.30 | 45 → 50 | 40 → 45 |
 | `translategemma-4b` | 47.90 | 35.40 | 32.18 | −15.72 | 69.53 | 59.24 | 25 → 35 | 40 → 45 |
 | `hymt2-7b` | 45.39 | 36.79 | 35.79 | −9.60 | 69.65 | 62.71 | 45 → 50 | 45 → 50 |
@@ -826,17 +974,24 @@ errors. Full table in [8. Metric roadmap: what else should be measured, and in w
 ![Round-trip curves](figures/fig1_roundtrip_curves.png)
 
 The shape is the same in all twelve panels: a cliff between cycle 1 and cycle 2, then a
-plateau. Averaged over the systems, **77% of all BLEU lost across ten round trips is
-lost in the first one**. By cycle 5 most systems have stopped changing entirely —
+plateau. (The figure was generated before DeepL was run and shows twelve systems; DeepL
+is in the tables.) Averaged over those twelve, **77% of all BLEU lost across ten round
+trips is lost in the first one**; with DeepL it is 76%. By cycle 5 most systems have stopped changing entirely —
 `hymt2-7b` is bit-identical from cycle 7 onward.
 
 Translation converges to a fixed point rather than decaying without bound. The
 practical implication is that round-trip degradation is a *property measurable in one
 cycle*; ten cycles were needed to establish that, but not to use it.
 
-Critical errors behave the same way. Five of twelve systems gain ≤5 points across all
-ten cycles, and the two that move most (`opus` +20, `nllb` +15) are the two weakest
-translators. The level, not the slope, is the story.
+Critical errors behave the same way. Seven of the twelve systems in the figure gain ≤5
+points on DE→EN across all ten cycles (an earlier draft said five; it does not
+reproduce from the data), and the systems that move most (`opus` +20, `nllb` +15,
+DeepL +15) are mostly the weakest translators. The level, not the slope, is the story.
+
+**DeepL is the one exception to "converges" in degree.** It loses 10.8 BLEU over ten
+cycles, and only 63% of that in the first; it loses **4.0 more after cycle 2**, the most
+of any system (next: `translategemma-4b`, 3.2). It does flatten (42.2, 41.8, 41.9 over
+the last three cycles), so "fixed point" still holds, but it is reached late.
 
 ### Finding 3 — round-trip stability is an independent axis
 
@@ -853,6 +1008,7 @@ translators. The level, not the slope, is the story.
 | `qwen35-4b` | −8.53 | 85% |
 | `nllb` | −8.61 | 79% |
 | `hymt2-7b` | −9.60 | 90% |
+| `deepl` ☁ | −10.78 | 63% |
 | `translategemma-27b` | −12.25 | 78% |
 | `translategemma-4b` | −15.72 | 80% |
 | `hymt2-30b-a3b` | −16.54 | 87% |
@@ -897,6 +1053,69 @@ open-class recall instrument.
 
 ---
 
+### Finding 6 — DeepL is competitive on the words and unstable under repetition
+
+The commercial baseline, added 2026-09-29 and run on the free API plan
+([3. Systems under test](#3-systems-under-test)). All 296 reports, scored with **one** detector
+version across all thirteen systems (see [5. Experiments](#5-experiments) for why
+that matters). **words%** is the share of documents with a critical *negation* or
+*laterality* finding; number and measurement findings, which are two thirds of all
+critical findings on this corpus, are shown separately and excluded from it.
+
+| System | words% | numbers% | all-crit% | term% | BLEU | chrF++ | TER |
+|---|---|---|---|---|---|---|---|
+| `DeepSeek-V4-Flash` ☁ | 4.1 | 17.2 | 19.9 | 1.4 | 53.7 | 74.7 | 33.3 |
+| `glm-5.2` ☁ | 4.7 | 15.9 | 19.3 | 1.4 | 51.3 | 73.4 | 34.8 |
+| `MiniMax-M3` ☁ | 6.1 | 16.6 | 21.3 | 1.7 | 53.5 | 74.8 | 33.5 |
+| `translategemma-4b` | 6.1 | 17.9 | 23.0 | 2.7 | 44.7 | 68.0 | 45.2 |
+| `translategemma-27b` | 6.4 | 18.9 | 23.6 | 1.4 | 55.0 | 75.8 | 34.9 |
+| **`deepl`** ☁ | **6.8** | 20.6 | 25.7 | 2.0 | 52.7 | 73.8 | 36.2 |
+| `hymt2-1.8b` | 7.4 | 19.6 | 25.3 | 2.0 | 39.1 | 64.2 | 49.0 |
+| `hymt2-7b` | 8.1 | 18.6 | 24.3 | 2.7 | 46.0 | 69.2 | 42.8 |
+| `hymt2-30b-a3b` | 9.8 | 25.7 | 31.1 | 3.0 | 47.7 | 71.2 | 41.8 |
+| `qwen35-4b` | 11.8 | 20.3 | 24.7 | 7.4 | 48.0 | 69.0 | 40.9 |
+| `qwen35-27b` | 13.9 | 24.0 | 28.4 | 8.1 | 51.7 | 70.4 | 38.2 |
+| `nllb` | 19.9 | 25.3 | 33.4 | 17.9 | 21.8 | 46.6 | 65.0 |
+| `opus` | 20.6 | 18.2 | 26.7 | 12.2 | 24.6 | 49.0 | 61.4 |
+
+DeepL is **sixth of thirteen on the words** and fourth on BLEU (per-document mean).
+Ranked by all-crit it drops to ninth, because its number-finding rate is the fifth
+highest; that is only partly a typographic artefact (below), which is why the words-only
+column exists.
+
+- **The words-only ranking differs from the standard one, and in a useful direction.**
+  `opus` looks middling on all-crit (26.7%) but is the *worst* system on the words
+  (20.6%). It emits fewer numbers, so it has fewer to get wrong — the under-translation
+  bias of Finding 5, visible from the other side.
+- **DeepL is unremarkable on laterality and negation.** Laterality: 5.7% of documents,
+  tied with `MiniMax-M3`, better than the seven weakest systems. Negation: 1.4%
+  (four documents) against 0.3% (one) for the three hosted LLMs. At this sample size that
+  is not a difference.
+- **Terminology is not a DeepL strength.** After the detector-version correction its
+  2.0% sits in the ordinary 1.4–3.0% band of the good systems.
+- **Round trip: the weakness.** −10.78 BLEU over ten cycles against −3.8 to −5.7 for the
+  best hosted LLMs, and the slowest to settle (Finding 2). Its critical rate goes
+  30% → 45% DE→EN, which at n = 20 is three documents.
+- **It has no COMET score**, nor does `translategemma-27b`; the COMET run predates both.
+
+**The `5-mm` artefact, measured.** DeepL writes a hyphenated unit for compound
+modifiers ("a 5-mm nodule"), and the number detector's measurement pattern requires
+whitespace between value and unit, so it reads the hyphenated form as a mismatch
+against the source's `5 mm` — the same code it gives a genuine `15 mm` error.
+Normalising the hyphen and re-scoring: DeepL emits it in **5 of 296 reports**, and
+doing so clears **2** critical documents (25.68% → 25.00%). `hymt2-30b-a3b` is the only
+other system affected (−0.34 points). The effect is real but small; it was described
+as "probably inflated" before being measured, which overstated it. The detector
+was **not** changed, because altering the shared instrument would revalue the whole
+benchmark.
+
+**What this does to the founding question.** The strongest commercial baseline lands in
+the middle of the field on the words, well behind the leading hosted LLMs, and is less
+stable than any of them under repetition. That neither answers "does it need a
+specialised model" nor supports "commercial MT is enough". It does mean the ~1-in-5
+document-level failure rate is not a property of open models: it is what the best
+available systems, commercial or not, produce on this corpus.
+
 ### Answering the question
 
 **Does German↔English medical translation need a specialised model?**
@@ -937,7 +1156,7 @@ The honest next step is the metric work in
 [8. Metric roadmap: what else should be measured, and in what order](#8-metric-roadmap-what-else-should-be-measured-and-in-what-order) — a learned semantic metric, an open-class
 error finder, and a small human-MQM validation set — and only then a decision about
 model building. Steps 1–3 of that roadmap need no new translations and no new
-annotation; all thirteen systems' outputs are already on disk.
+annotation; all fourteen systems' outputs are already on disk.
 
 ### Threats to validity
 
@@ -950,6 +1169,12 @@ annotation; all thirteen systems' outputs are already on disk.
   data, and may be cleaner than production dictation.
 - **Detector precision and recall** — quantified where possible, unbounded where not.
   See [7. Metrics: what we compute, how to read it, and why](#7-metrics-what-we-compute-how-to-read-it-and-why) §2.3.
+- **DeepL is a single dated run on an unversioned service.** No model id is exposed, so
+  it cannot be re-run to the same result later, and it was run once.
+- **Score sets from different dates are not comparable.** The terminology detector
+  changed after the July runs; see [5. Experiments](#5-experiments). The published
+  critical rates are unaffected, but any terminology figure from the stored leaderboard
+  is stale.
 - **No human validation yet.** Nothing in this chapter has been checked by a clinician.
   That is the single largest gap.
 
@@ -1196,8 +1421,9 @@ Derived quantities used in the results:
 front-loaded share  = (BLEU_c1 − BLEU_c2) / (BLEU_c1 − BLEU_c10)   (how much went in cycle 1)
 ```
 
-The front-loaded share averages 77% across the twelve systems, which is the evidence for
-the convergence claim in [6. Results](#6-results).
+The front-loaded share averages 77% across the twelve systems (76% with DeepL, the slowest
+to settle at 63%), which is the evidence for the convergence claim in
+[6. Results](#6-results).
 
 ---
 
@@ -1227,10 +1453,27 @@ off-distribution here: trained on WMT news, applied to radiology reports, and
 learned metrics are documented to degrade outside their training domain
 ([arXiv:2402.18747](https://arxiv.org/abs/2402.18747)).
 
+The failure is visible at the level of a single segment, using the same sentence
+as §0:
+
+| source → candidate | COMET |
+|---|---|
+| "Kein Pleuraerguss." → "No pleural effusion." ✅ | 0.9809 |
+| "Ein 5 mm Knoten links." → "A 5 mm nodule on the left." ✅ | 0.9702 |
+| **"Kein Pleuraerguss." → "Pleural effusion."** ❌ negation dropped | **0.9110** |
+
+Inverting the finding — the patient now *has* the effusion the source rules out —
+costs COMET seven hundredths and still scores 0.91. BLEU charged the identical
+error 15.5 points (§0). The metric designed to capture semantic adequacy
+reproduces BLEU's blind spot rather than fixing it, which is the cleanest single
+demonstration that the problem is not n-gram matching.
+
 **Operational note.** `unbabel-comet` 2.2.7 requires `transformers` 4.x and
 cannot share this project's environment; it lives in `.venv-comet`. Installing it
 into the main venv downgraded transformers and broke `Qwen3.5` loading for
-unrelated jobs.
+unrelated jobs. The isolated venv also needs `setuptools<81`: setuptools 81+
+**removed** `pkg_resources`, which COMET 2.2.7 still imports — so `pip install
+setuptools` reports "already satisfied" while the import keeps failing.
 
 ### 5. LLM-as-judge with a clinical rubric
 
@@ -1313,7 +1556,7 @@ This chapter surveys the alternatives and commits to an order of adoption.
 
 ### The gap, stated precisely
 
-Two things are missing.
+Three things are missing.
 
 1. **A learned semantic metric.** Every surface metric here is lexical. None can tell
    that "pleural fluid collection" and "pleural effusion" mean the same thing — as
@@ -1323,6 +1566,38 @@ Two things are missing.
    The `BWK 12` → `L12` miss (thoracic vertebra rendered as lumbar, no detector fired)
    is not a bug to patch — it is the signature of a closed-class approach. Something
    open-class is needed to bound the true error rate.
+3. **More than one reference — or none.** This was added after
+   [Experiment 4](#10-experiments-dictionary-injection-debate-and-a-review-cascade)
+   measured the size of the problem, and it is the most concrete of the three.
+
+   PARROT gives one English translation per report, and on the vocabulary that
+   matters the corpus does not agree with itself about what that translation is.
+   `Beurteilung` is rendered *conclusion* 50 times, *impression* 32 and
+   *assessment* 6 across the reports where both sides carry the header, so **the
+   most frequent form accounts for only 57% of occurrences** — 52% on the
+   held-out half, where it is nearly a coin flip between *conclusion* and
+   *impression*. All of those forms are what radiologists write — this project's
+   own section classifier in
+   [`data/sections.py`](src/medmt_eval/data/sections.py) lists
+   `Impression | Assessment | Conclusion | Summary | Interpretation` as one role
+   precisely because they are interchangeable.
+
+   A single-reference lexical metric therefore cannot separate *wrong term* from
+   *correct synonym this reference happens not to use*, and for high-frequency
+   report vocabulary the second case is the common one. This is not the same
+   complaint as item 1: a learned metric scores meaning but still scores it
+   against one reference, so COMET inherits the problem wherever the reference's
+   word choice was arbitrary. The fixes are multiple references (expensive — it
+   is retranslation, and by clinicians) or metrics that never consult a reference
+   at all, which is what makes the source-referenced clinical detectors and the
+   LLM judge in §C structurally more interesting than their current accuracy
+   suggests.
+
+   Experiment 4 also gives the practical warning for anyone tempted to shortcut
+   this: it mined its glossary from the corpus' own English side, which biases
+   every reference-based comparison *in the glossary's favour*, and BLEU still
+   fell 2.16 points against no glossary at all (p = 0.018). Contamination did not
+   even buy a spurious win.
 
 ---
 
@@ -1395,7 +1670,7 @@ judgement the detectors cannot make.
   (RUBRIC-MQM, [ACL 2025 Industry](https://aclanthology.org/2025.acl-industry.12/));
   moving from a bare GEMBA prompt to a rubric-style one lifted correlation with humans
   from 0.09 to 0.35 — a warning about how much the prompt determines the result.
-- **Self-preference.** Three of our thirteen systems are hosted LLMs. Using an LLM to
+- **Self-preference.** Three of our fourteen systems are hosted LLMs. Using an LLM to
   judge LLM translations invites a conflict of interest, and the judge must not be one
   of the systems under test.
 
@@ -1495,41 +1770,40 @@ They are mutually exclusive in one environment. COMET therefore lives in its own
 `.venv-comet`; the main venv stays on transformers 5.x for the translation
 models.
 
-### TODO — benchmark DeepL
+### Result — DeepL benchmarked; the glossary arm is still open
 
-**DeepL is the obvious commercial baseline for DE↔EN and it is not yet in the
-benchmark.** An adapter already exists (`src/medmt_eval/models/deepl_mt.py`,
-adapter name `deepl`, free-tier aware) and is wired into the factory; it has
-never been run against PARROT.
+**Done 2026-09-29.** DeepL now has a single pass over PARROT-DE and the ten-cycle
+round trip. Full numbers in
+[6. Results](#6-results).
+In short: sixth of thirteen on negation and laterality (6.8% of documents), fourth on
+BLEU, and the least stable of the strong systems under repetition (−10.8 BLEU against
+−3.8 to −5.7 for the best hosted LLMs). It does not change the conclusion, and it removes
+the objection that every claim in the thesis was relative to open models and one
+hosted gateway.
 
-This matters more than an extra row in the table. Every claim in this thesis is
-relative to open models and one hosted gateway. DeepL is what a German hospital
-would actually reach for, so "is a specialised model needed?" is not answered
-without it.
+It was kept separate from German MeSH as planned: DeepL was scored against the human
+references on PARROT, never against an MT-derived term bank, because German MeSH is
+itself a DeepL first pass ([9. Terminology: which dictionary, and what it costs to get it wrong](#9-terminology-which-dictionary-and-what-it-costs-to-get-it-wrong)).
 
-Two things to get right when it runs:
+**Practical notes.** It runs on the login node (the GPU nodes have no internet). The free
+plan allows **1,000,000 characters a month**, not the 500,000 an earlier version of this
+section stated; the run used 530,862 in total (226,785 for the single pass), leaving
+roughly 469,000 unspent. See [3. Systems under test](#3-systems-under-test) for the adapter fixes.
 
-- **It is the reference commercial system, and it is also upstream of one of the
-  candidate dictionaries.** German MeSH is a DeepL first pass
-  ([9. Terminology: which dictionary, and what it costs to get it wrong](#9-terminology-which-dictionary-and-what-it-costs-to-get-it-wrong)), so any evaluation that scores DeepL
-  against German MeSH terminology is scoring it against its own output. Keep the
-  two apart: benchmark DeepL on PARROT with the human references, never against
-  an MT-derived term bank.
-- **Glossary support is a first-class feature of the API**, which makes DeepL the
-  natural second arm for Experiment 1 — its glossary is applied inside the
-  translation engine rather than injected as a prompt, so it tests whether the
-  null result in [09](#10-experiments-dictionary-injection-debate-and-a-review-cascade) is about dictionaries in
-  general or about *prompt-injected* dictionaries specifically. That is the
-  single most informative follow-up available.
-
-Needs: an API key (free tier is 500k chars/month; PARROT-DE is ~229k characters,
-so the full corpus fits), and `DEEPL_API_KEY` exported at submission. Both the
-single-pass benchmark and the ten-cycle round-trip should be run.
+**Still open: the glossary arm, and it is the more informative half.** DeepL applies a
+glossary inside the translation engine rather than as a prompt instruction, so a DeepL
+glossary run would separate "dictionaries do not help" from "*prompt-injected*
+dictionaries do not help". `/v3/glossaries` is reachable on the project's key (HTTP 200,
+no glossaries yet), but **whether the free plan allows creating one has not been tested**.
+The cheapest first step is a single tiny glossary. The ceiling analysis in
+[09](#10-experiments-dictionary-injection-debate-and-a-review-cascade) predicts a small effect on the clinical layer
+whatever the glossary contains, since two thirds of critical errors are numeric, so this
+is a test of mechanism, not an expected fix.
 
 ### Order of adoption
 
 1. **COMET-22 + COMET-Kiwi over the existing outputs.** Cheapest, no new translations
-   needed — all thirteen systems' outputs are already on disk. Answers immediately
+   needed — all fourteen systems' outputs are already on disk. Answers immediately
    whether the BLEU ranking survives a semantic metric. If COMET reorders the systems,
    that strengthens the central finding; if it reproduces the BLEU order, the clinical
    layer is carrying the whole argument and must be hardened first.
@@ -2046,7 +2320,7 @@ stage *n* is credited only with what it changed relative to stage *n−1*.
 
 **Only stage 2 is shown the dictionary, and that asymmetry is the experiment.**
 Stage 3 exists to catch corrections the glossary got *wrong* — and the rerun of
-Experiment 1 established that it has something to catch: 26% of glossary terms
+Experiment 1 established that it has something to catch: 21% of glossary terms
 the model adopted were terms the human reference does not use. A reviewer with
 the same glossary would inherit the same bias.
 
@@ -2204,6 +2478,174 @@ run. It is now measured: three models averaging toward the worst of them.
 
 Again 0% of documents converged in two rounds.
 
+### Experiment 4 — a glossary mined from the corpus itself
+
+Experiments 1 and 3 both failed in the same place, and
+[9. Terminology: which dictionary, and what it costs to get it wrong](#9-terminology-which-dictionary-and-what-it-costs-to-get-it-wrong) identified the mechanism: 21% of the
+injected terms the model adopted are terms the human reference does not use,
+because **an ontology's preferred label is not report register**. RadLex has the
+right concepts and the wrong wording.
+
+A glossary read off the reports themselves cannot have that defect. Its terms are
+report register by construction. This experiment tests whether that is enough.
+
+#### The cost, stated first
+
+Mining terminology from PARROT **invalidates every reference-based metric on this
+corpus**. BLEU, chrF++, TER and COMET score against the same English
+translations the terms were mined from, so injecting mined wording and then
+measuring agreement with it measures leakage. Splitting by document does not
+repair it — the same radiologists wrote both halves, so house style crosses the
+split.
+
+So the split here buys something narrower than it looks: it guarantees no scored
+document contributed a term, which removes *direct* memorisation, and leaves
+register leakage untouched. The primary read is therefore the source-referenced
+layer — the negation, laterality, number and measurement detectors, which never
+look at the reference. Reference-based scores are reported and labelled
+contaminated. This is the rule in
+[4. Methods](#4-methods) applied rather than
+broken: the corpus measures terminology and does not generate it, *except* in
+this one experiment, which exists to measure what that exception costs.
+
+#### Method
+
+196 train / 100 val documents, stratified by modality, seed 20260928
+(`data/splits/parrot_de_mine_v1.json`). Terms come from the train half; the
+experiment runs on the val half. Built by
+[`scripts/build_glossary_mined.py`](scripts/build_glossary_mined.py).
+
+Three decisions were forced by measurement rather than chosen up front, and each
+one is the reason the output is usable at all.
+
+**Align at the sentence level, not the document level.** The first attempt scored
+Dice coefficients over whole documents and produced `Herz -> mediastinum`,
+`Milz -> kidneys` and `Leber -> pancreas`. The cause is structural, not
+statistical: radiology anatomy terms *systematically co-occur* — heart,
+mediastinum, pleura and lungs appear in every chest CT — so a document-wide
+window cannot separate "is the translation of" from "appears in the same report
+as". Narrowing the window to a sentence removed every such swap. Sentences are
+paired by index in the 49% of train documents whose sentence counts match on both
+sides, with a 0.5–2.0 length-ratio guard. This is much cruder than `fast_align`
+or `eflomal`; it is adequate here only because PARROT's two sides are direct
+translations, so order is preserved.
+
+**Let the English side be a phrase.** One German compound routinely maps to an
+English multiword. Unigram-only alignment truncated `Pleuraerguss` to `pleural`
+and `Perikarderguss` to `pericardial`, and injecting a truncation is worse than
+injecting nothing. Candidates are 1–3 grams and the longest within 10% of the
+best Dice wins.
+
+**Require a mutual best match.** Without it, `available for comparison` was
+simultaneously the best match for four different German words. A German word's
+best English candidate must also have that word as its own best German candidate.
+
+That yields 88 pairs. The last step is the one that turned the experiment into a
+different finding.
+
+#### Screening against what the models already do
+
+For each mined pair, count how often three baseline systems' *existing*
+train-split translations already contain the English side. A pair at 97% is
+correct and useless — the glossary slot is spent telling the model something it
+already knows, which is precisely the failure mode of the frequency-weighted
+RadLex matches in Experiment 1, where the most-matched term was `indium`.
+
+Splitting the 87 screened pairs at 60% separates them cleanly, and the two halves
+are cleanly *opposed*:
+
+| bank | terms | models already produce it | mining precision (hand audit) |
+|---|---|---|---|
+| `freq` ∖ `hard` (already > 60%) | 59 | 68% | ~92% (54/59) |
+| `hard` (already ≤ 60%) | 28 | 29% | ~39% (11/28) |
+
+Precision and headroom are **anti-correlated**, and the mechanism is not a tuning
+problem. A German term with a stable one-to-one English rendering is easy for the
+aligner *and* easy for the model, for the same reason — the mapping is
+context-free. A term the models get wrong is one whose English form depends on
+context, and a context-free glossary entry cannot express it:
+
+- `frei -> well aerated` is correct inside *Mastoidzellen frei* and wrong
+  everywhere else.
+- `Verschattung -> lung field` is simply wrong (*Verschattung* is an opacity).
+- `groß -> normal in size`, `Frei -> cells are well` — fragments of collocations.
+
+Against which, the correct entries in the hard bank are exactly the register
+differences an ontology could never supply:
+
+| German | mined English | models produce it | what it is |
+|---|---|---|---|
+| `Beurteilung` | conclusion | 0% | models write "Assessment"; radiologists write "Conclusion" |
+| `Ebenen` | two views | 9% | *in zwei Ebenen* is an idiom, not compositional |
+| `belüftet` | aerated | 22% | register |
+| `Abklärung` | evaluation | 37% | register |
+| `Raumforderung` | mass | 41% | register |
+| `Kontrastierung` | enhancement | 62% | register |
+
+Both banks are shipped **exactly as mined, with no hand editing**, so the
+precision of the mining is part of what the experiment tests rather than
+something corrected out of it.
+
+Each bank runs against the standard three arms — `none`, `glossary`,
+`distractor` — on the 100 held-out documents, with `qwen35-4b`, the same backend
+as Experiments 1 and 3. The terminology detector keeps its own external bank
+(`radiology_en_de_starter.csv`), disjoint from the injected glossary, so it is
+not scored on the terms being injected.
+
+#### The ceiling, computed before reading the result
+
+The overview asserts that this project's failures are "concentrated in numbers
+and measurements, where terminology and committee methods cannot reach by
+construction". That was a qualitative claim. On the val split it can be made
+exact, and it should be, because it bounds what Experiment 4 could possibly
+achieve before any score is read.
+
+`qwen35-4b` on the 100 held-out documents: 28 carry a critical error, from 35
+critical findings.
+
+| detector | findings | share |
+|---|---|---|
+| `number_unit_parser` | 23 | 65.7% |
+| `laterality_lexicon` | 11 | 31.4% |
+| `segment_negation_cues` | 1 | 2.9% |
+
+**16 of the 28 error documents fail on numbers alone.** No terminology
+intervention can reach them — a bilingual term pair says nothing about whether
+`7646,06 µGym²` survived. That caps any glossary at the remaining 12
+documents, or 12 points of the 28% rate.
+
+The 12 do not survive inspection either. Their non-numeric failures are 5 *dropped*
+laterality findings (the expected side is absent from the output entirely, and a
+glossary cannot supply a word the model declined to emit), 6 flipped-or-other,
+and 1 negation. And the lexical mapping is not what is failing: `rechts → right`
+and `links → left` are in the mined bank precisely because they are frequent, and
+the screening step measures that the baselines already produce them 98% and 96%
+of the time. The laterality errors are not mistranslations of *rechts*; they are
+omissions elsewhere in a long document.
+
+So the honest expectation is a **ceiling near zero on the clinical layer** — at
+most 6 reachable findings across 100 documents, where one document is one point,
+which is inside the noise this design can resolve. Experiment 4 is therefore not
+a test of whether a mined glossary fixes clinical errors on PARROT; the ceiling
+analysis answers that, and the answer is that it cannot, whatever the bank
+contains. What the run can still establish is narrower and worth having:
+
+1. whether mined terms are **adopted** at all, and at what rate against RadLex's
+   80.8%;
+2. whether the adopted-but-absent-from-reference rate falls below RadLex's 20.8%,
+   which is the direct test of the register hypothesis and the reason this
+   experiment exists;
+3. whether the glossary block does **harm** — the distractor arm, and the 39%
+   mining precision of the hard bank, make injected error a live possibility
+   rather than a hypothetical;
+4. how much reference-based score moves purely from leakage, which is a
+   measurement of the contamination itself and useful as a caution for anyone
+   reading corpus-mined glossary results elsewhere.
+
+Recording this before the numbers arrive is the point. A null result that was
+predicted from a computed ceiling is evidence about the corpus; the same null
+reported afterwards reads as a failed experiment.
+
 ### Running them
 
 ```bash
@@ -2219,11 +2661,20 @@ sbatch scripts/experiments/cascade.slurm
 
 # with the anti-circularity split active
 EXP_HOLDOUT=0.5 BACKEND=local:Qwen/Qwen3.5-4B sbatch scripts/experiments/glossary.slurm
+
+# Experiment 4 — mine the banks from the train split, then run both on val.
+# The builder refuses to overwrite, so --out-suffix is the version.
+python scripts/build_glossary_mined.py --out-suffix v1
+BACKEND=local:Qwen/Qwen3.5-4B sbatch scripts/experiments/glossary_mined.slurm
 ```
 
-Both job scripts preflight the corpus, the glossary (failing if fewer than 100
-usable entries survive filtering), and any credential the chosen backend needs,
-before requesting any work.
+Every job script preflights the corpus, the glossary and any credential the
+chosen backend needs before requesting work. Experiment 1 fails if fewer than 100
+usable entries survive filtering; Experiment 4 uses a floor of 20, since the hard
+bank is 28 entries by construction, and adds one check the others do not need —
+it intersects the val document ids with the mining half and aborts if they
+overlap. That assertion is the entire methodological basis for the run, so it is
+verified at submission rather than assumed.
 
 ### Results
 
@@ -2318,11 +2769,34 @@ RadLex's preferred label and is not wrong — it is simply not what a radiologis
 writes. The no-glossary arm already had it right, and the glossary overrode a
 correct translation with a formally correct one.
 
-Measured across the run: of **386 injected terms the model adopted, 100 (26%)
-are terms the human reference does not use.** The most frequent offenders are
-exactly the high-frequency report vocabulary — `Beurteilung → assessment` (15,
-where the reference says *evaluation*), `Indikation → indication` (5),
+Measured across the run: of 542 injected terms, the model adopted 438, and
+**91 of those 438 (20.8%) are terms the human reference does not use.** Counting
+every injection, matching case- and punctuation-insensitively; the rate is
+16-28% across all three Experiment-1 runs and every counting variant tried
+(per-injection or deduplicated, raw or normalised match), so the conclusion does
+not depend on the definition. An earlier draft of this chapter reported
+"386 adopted, 100 (26%)", which does not reproduce from the stored results under
+any of those variants and has been corrected; the per-term detail below was
+verified against them and reproduces exactly.
+
+The most frequent offenders are exactly the high-frequency report vocabulary --
+`Beurteilung → assessment` (15), `Indikation → indication` (5),
 `Hinweis auf → suggestive` (4).
+
+`Beurteilung` also shows *why* a single preferred label cannot win here. It is a
+section header, so its rendering can be counted exactly by aligning the German and
+English `impression`-role headers: across the 88 reports carrying both, the
+English side is *conclusion* 50, *impression* 32, *assessment* 6. RadLex's label
+is `assessment` -- the **rarest** of the three, 7% of usage -- which is the
+register failure in one number. But no label would have been safe: even
+*conclusion*, the modal form, is wrong on 43% of reports. (An earlier draft of
+this paragraph asserted the reference says *evaluation*, and a later one gave a
+five-way split including *findings*; both came from searching reference text
+rather than aligning headers, and neither is correct. See
+[the measurement error recorded in Experiment 4](#experiment-4--the-corpus-cannot-agree-with-itself).)
+[Experiment 4](#experiment-4--a-glossary-mined-from-the-corpus-itself) mines
+`Beurteilung → conclusion` from the corpus instead and finds the models produce
+it 0% of the time -- the same disagreement reached from the other side.
 
 So the glossary is doing precisely what it was told to do, and that is the
 problem. "Where the source uses the term on the left, the translation must use
@@ -2395,6 +2869,172 @@ the strongest argument yet for the metric work in
 [8. Metric roadmap: what else should be measured, and in what order](#8-metric-roadmap-what-else-should-be-measured-and-in-what-order): an LLM-as-judge with a clinical
 rubric would read these critiques as findings.
 
+#### Experiment 4 — the corpus cannot agree with itself
+
+`qwen35-4b`, 100 held-out documents, 87-term frequency bank
+(`results/experiments/4399511/`). The hard-bank arms are reported below it.
+
+| arm | crit% | BLEU* | chrF* | TER* | terms/doc | adopted | adopted but absent from reference |
+|---|---|---|---|---|---|---|---|
+| `none` | 22.0% | 49.01 | 71.19 | 37.20 | 0 | — | — |
+| `glossary` | 19.0% | 46.85 | 69.69 | 38.42 | 9.3 | **90.6%** | 17.6% |
+| `distractor` | 17.0% | 45.75 | 68.57 | 39.80 | 9.3 | 8.5% | 48.1% |
+
+\* reference-based and contaminated: the terms were mined from this corpus'
+English side. See [the cost, stated first](#the-cost-stated-first).
+
+**The clinical layer is null, as the ceiling required.** Glossary moves 22 → 19
+documents, distractor moves it to 17, and the distractor is again the best arm.
+Paired on the same documents, glossary-only errors 4 against distractor-only 2,
+McNemar exact p = 0.688. Computed on this run's own baseline the reachable
+ceiling was 7 documents of 100 — 15 of the 22 error documents fail on numbers
+alone — so a 3-document movement inside a 7-document ceiling is exactly the
+"predicted null" the previous section registered, not a new finding.
+
+**Adoption was not the problem.** At 90.6% this is the highest adoption rate in
+the project, against RadLex's 80.8% and Wikidata's 86.0%. Mined terms *are*
+report register and the model takes them up more readily than ontology labels.
+That closes the loophole that would otherwise make every null here
+uninterpretable: the terms were used, and using them did not help.
+
+**And the register hypothesis turns out to explain almost none of it.** This was
+the experiment's actual question. If Experiment 1 failed because an ontology
+label is not the wording a radiologist writes, then a bank read off the reports
+themselves should drive the adopted-but-absent-from-reference rate toward zero.
+It went from 20.8% to **17.6%** — about three points. Roughly seventeen points
+survive mining the terminology out of the corpus that is scoring it.
+
+Those seventeen points are not a defect of the mining. They are the corpus
+disagreeing with itself. The largest single contributor is the term this
+experiment was most pleased to find:
+
+`Beurteilung` is a section header, so its rendering can be measured exactly
+rather than estimated: take the German section the classifier assigns the
+`impression` role, take the English section it assigns the same role, and read
+both literal headers. Across the 92 reports carrying that role on both sides:
+
+| `Beurteilung` is rendered | whole corpus (n=88) | held-out half (n=31) |
+|---|---|---|
+| *conclusion* | 50 (**57%**) | 16 (**52%**) |
+| *impression* | 32 (36%) | 14 (45%) |
+| *assessment* | 6 (7%) | 1 (3%) |
+
+`Beurteilung → conclusion` accounts for 39 of the orphaned adoptions on its own,
+and the mining chose correctly: *conclusion* is the modal form. It is still
+orphaned on **roughly half** the documents, because the corpus splits almost
+evenly between *conclusion* and *impression*. **No single term pair can exceed
+about 57% on this term**, whichever is chosen, so the mining did not err — a
+single right answer does not exist.
+
+Two other mined terms show the same pattern more mildly, counted by searching the
+aligned val sentence (these are not headers, so the exact method above does not
+apply): `Raumforderung → mass` against *mass* 8 / *lesion* 3, and
+`Thorax → thorax` against *thorax* 14 / *chest* 4.
+
+This also sharpens what RadLex got wrong. Its label for this concept was
+*assessment* — 7% of actual usage, the rarest of the three forms in play — while
+mining from the corpus yields *conclusion* at 57%. That gap is the register
+effect, and it is large per-term. What it buys in aggregate is small (20.8% →
+17.6%) only because both banks agree on the many terms that were never in doubt.
+
+This is not sloppiness in PARROT either. English radiology has no settled word
+for that heading, and **this project already encodes that fact**:
+[`data/sections.py`](src/medmt_eval/data/sections.py) classifies
+`Impression | Assessment | Conclusion | Summary | Interpretation` as five surface
+forms of one section role, and `Beurteilung | Zusammenfassung | Fazit |
+Schlussfolgerung` as its German counterparts. One module in this repository
+treats them as interchangeable while the metric layer scores choosing among them
+as a terminology error. The section classifier was right.
+
+**What this does to the reference-based metrics.** Two readings, and the second
+matters more.
+
+The narrow one: injecting the mined glossary *lowered* BLEU against no glossary
+at all, 49.01 → 46.85, −2.16 sentence-level, paired bootstrap p = 0.018. That is
+in the teeth of the contamination, which biases this comparison *toward* the
+glossary — the terms were lifted from the same English text BLEU scores against,
+and the leakage still did not cover the cost of the prompt block. Against the
+distractor the mined terms are worth +1.10 BLEU (p = 0.11), so relevant terms do
+beat irrelevant ones, within noise. Compare Experiment 1's −4.01 against
+distractor: mining removes most of the ontology's surface penalty without buying
+anything clinical.
+
+The broad one is the more useful result of this experiment, and it is about the
+instrument rather than the intervention. If the corpus renders its most frequent
+term four ways, then BLEU, chrF++ and TER **cannot distinguish "wrong term" from
+"a correct synonym this particular reference did not use"** — and on the
+vocabulary a glossary targets, that ambiguity is the common case, not the edge
+case. A system writing *impression* is penalised against a reference writing
+*conclusion*, and both are what a radiologist writes. That is a measured argument
+for the direction in [8. Metric roadmap: what else should be measured, and in what order](#8-metric-roadmap-what-else-should-be-measured-and-in-what-order) — multiple
+references, or source-referenced judging that never needs the reference's word
+choice — and it is stronger than the arguments already recorded there because it
+is a number rather than a concern.
+
+##### The hard bank closes the loop
+
+The 28-term hard bank is the arm that was supposed to matter: the only terms with
+measurable headroom, at 29% baseline agreement against the freq bank's 68%.
+
+| arm | crit% | BLEU* | chrF* | TER* | terms/doc | adopted | adopted but absent from reference |
+|---|---|---|---|---|---|---|---|
+| `none` | 22.0% | 49.01 | 71.19 | 37.20 | 0 | — | — |
+| `glossary` | 20.0% | 46.78 | 69.26 | 38.95 | 3.7 | 83.4% | **43.6%** |
+| `distractor` | 19.0% | 46.90 | 69.58 | 39.53 | 3.7 | 10.4% | 82.1% |
+
+Two numbers finish the argument.
+
+**43.6% of adopted hard-bank terms are absent from the reference**, against 17.6%
+for the freq bank. The hand audit of this bank put its mining precision near 39%;
+the metric independently reports 56% of adoptions landing in the reference. Two
+unrelated estimates of the same defect agree, which is the strongest evidence
+available here that the audit was not just pessimism.
+
+**The hard terms are worth nothing over random ones: −0.12 BLEU against the
+distractor, paired bootstrap p = 0.45.** Compare +1.10 (p = 0.11) for the freq
+bank. The subset with headroom carries no measurable signal at all, while the
+subset that carries signal had no headroom. The anti-correlation predicted from
+the screening step is therefore not an artefact of how the banks were split — it
+survives end to end, in the arm comparison that was designed to isolate the terms
+from the prompt block.
+
+The clinical layer is null for a third time (22 → 20 documents, McNemar exact
+p = 1.000 against the distractor), as the ceiling required, and the distractor is
+again nominally the best arm.
+
+So the two banks bracket a trade-off with no useful point on it:
+
+| | freq bank | hard bank |
+|---|---|---|
+| terms | 87 | 28 |
+| baselines already produce them | 68% | 29% |
+| mining precision (audit) | ~92% | ~39% |
+| adopted but absent from reference | 17.6% | 43.6% |
+| BLEU* vs distractor | +1.10 (p = 0.11) | −0.12 (p = 0.45) |
+| critical errors vs distractor | p = 0.688 | p = 1.000 |
+
+**A determinism check, obtained for free.** Each bank re-translated the same 100
+documents for its own `none` arm, so the run contains two independent executions
+of an identical configuration at temperature 0. All **100 of 100 outputs are
+byte-identical**. That was not designed as a check and is the reason to record it:
+the paired tests above assume the pipeline is deterministic, and this run
+demonstrates it rather than assuming it. The redundant arm cost 67 GPU-minutes;
+next time `--arms glossary distractor` plus one shared baseline would save that,
+at the cost of this evidence.
+
+**A measurement error worth recording, because it inverted a conclusion.** The
+`Beurteilung` row above was first computed by searching each aligned val sentence
+for candidate words, which returned *impression* 13, *conclusion* 10, *findings*
+9, *assessment* 7 and a "33% ceiling". That was wrong in a specific way: a report
+contains a `Findings:` header *and* an impression header, so scanning the whole
+sentence neighbourhood counted another section's header as a rendering of this
+one. *findings* and *evaluation* are not renderings of `Beurteilung` at all. The
+header-aligned count above supersedes it, and it moves the ceiling from 33% to
+about 57% — the argument survives, the number did not. The general lesson is the
+one already in [5. Experiments](#5-experiments): a loose proxy that happens
+to support the expected conclusion is the most dangerous kind, and this one was
+caught only by measuring it a second way on purpose.
+
 #### Limits
 
 - **n = 40 and n = 20.** Critical-error rate moves in 2.5- and 5-point steps.
@@ -2408,3 +3048,248 @@ rubric would read these critiques as findings.
 - The debate cost roughly `3N + 4` model calls per document against 1 for a
   plain translation: 43 minutes for 20 documents versus 21 minutes for 120
   translations in Experiment 1.
+
+## 11. Configurations and protocols
+
+This chapter is the settings reference: every model with its exact runtime
+configuration, every experiment with its exact protocol, and what was recorded
+and selected on. It exists because the other chapters record *verdicts* and
+*reasoning*, and a reader reproducing the work needs the numbers.
+
+Everything below was read out of the code and launchers rather than from memory,
+and cites the file it came from.
+
+### 0. There are no training recipes, because nothing was trained
+
+**No model in this project was fine-tuned, adapted or otherwise updated.** The
+repository contains no optimiser, no backward pass and no PEFT configuration —
+`src/medmt_eval/` is an inference and evaluation harness. Every system was run at
+its published weights.
+
+That is a deliberate finding rather than an omission: the project asked whether a
+specialised German↔English medical model is *needed*, and concluded that the case
+for fine-tuning is not yet made ([06-results](#6-results) §"Answering the
+question"). So the analogue of a training recipe here is the **decoding
+configuration** and the **experimental protocol**, and those are what follow.
+
+### 1. Model inventory and runtime configuration
+
+Per-model settings are resolved in
+[`scripts/roundtrip/_rt_common.sh`](scripts/roundtrip/_rt_common.sh). `chunk`
+is the sentence-chunking budget in tokens (0 = disabled).
+
+| Name | Adapter | Model id | batch | max-new | chunk |
+|---|---|---|---|---|---|
+| `identity` | `identity` | — | 32 | 2048 | 0 |
+| `opus` | `opus` | `Helsinki-NLP/opus-mt-{de-en,en-de}` | 8 | **480** | **400** |
+| `nllb` | `nllb` | `facebook/nllb-200-distilled-1.3B` | 2 | 960 | **400** |
+| `hymt2-1.8b` | `hymt2` | `tencent/Hy-MT2-1.8B` | 4 | 2048 | 0 |
+| `hymt2-7b` | `hymt2` | `tencent/Hy-MT2-7B` | 2 | 2048 | 0 |
+| `hymt2-30b-a3b` | `hymt2` | `tencent/Hy-MT2-30B-A3B` | 1 | 2048 | 0 |
+| `translategemma-4b` | `translategemma` | `google/translategemma-4b-it` | 2 | 2048 | 0 |
+| `translategemma-27b` | `translategemma` | `google/translategemma-27b-it` | 1 | 2048 | 0 |
+| `qwen35-4b` | `prompted-llm` | `Qwen/Qwen3.5-4B` | 2 | 2048 | 0 |
+| `qwen35-27b` | `prompted-llm` | `Qwen/Qwen3.5-27B` | 1 | 2048 | 0 |
+| `glm-5.2` ☁ | `openai-compat` | served as `z-ai/glm-5.2` | 4 | 2048 | 0 |
+| `DeepSeek-V4-Flash` ☁ | `openai-compat` | served as `deepseek-ai/deepseek-v4-flash-0731` | 4 | 2048 | 0 |
+| `MiniMax-M3` ☁ | `openai-compat` | served as `minimaxai/minimax-m3` | 4 | 2048 | 0 |
+| `deepl` ☁ | `deepl` | none disclosed | 8 | — | — |
+
+`deepl` differs in kind: no GPU, no model id, no generation parameters. Settings that
+matter are the target variant (`EN-US`), a batch of 8 documents per request, and the
+login-node run ([`scripts/deepl/run_deepl.sh`](scripts/deepl/run_deepl.sh)). Batch
+sizes for the other systems are memory-driven, not tuned for quality: they are the largest that
+fit the allocation each model was given ([05-experiments](#5-experiments)).
+
+#### Why three models differ from the rest
+
+- **`opus` — 480 max-new, chunked at 400.** Marian has 512 encoder *and* decoder
+  positions. Exceeding the decoder table raises a CUDA device-side assert
+  (`marian/modeling_marian.py:596`), so generation is capped below it.
+- **`nllb` — chunked at 400.** 1024 encoder positions, still short of a full
+  report. The budget was originally 800 tokens (≈2400 characters), longer than
+  most documents, so chunking never engaged at all; 400 was the correction.
+- **`identity` — batch 32.** It performs no computation; the batch size only
+  affects loop overhead.
+
+### 2. Generation defaults
+
+`GenerationConfig` ([`models/base.py`](src/medmt_eval/models/base.py)):
+
+| Field | Default |
+|---|---|
+| `batch_size` | 8 |
+| `num_beams` | 4 |
+| `max_input_tokens` | 512 |
+| `max_new_tokens` | 512 |
+| `device` | `None` (auto) |
+
+The round-trip runs override these: **`--num-beams 1`** (greedy, for tractability
+over 20 passes × 13 systems) and **`--max-input-tokens 4096`**. Hosted models run
+at **temperature 0** so results are reproducible, matching the local models.
+
+Adapter-specific behaviour that changes outputs, not just speed:
+
+- **Chat templates, not raw text.** `PromptedLLMTranslator` calls
+  `apply_chat_template(..., enable_thinking=False)`, with a `strip_thinking()`
+  regex as a second line of defence.
+- **Left padding.** `padding_side="left"` for batched decoder-only generation;
+  right padding corrupts it, and fixing this moved `qwen35-4b` from 24.66% to
+  18.92% critical errors.
+- **`direction_specific = True` for Opus only.** One checkpoint per language
+  pair, so the round-trip builds two instances for Opus and exactly one for
+  every other adapter.
+- **Served-model verification** on every hosted call (`_check_served_model`).
+
+### 3. Prompt templates
+
+Verbatim, because a prompt is a setting.
+
+**Plain translation** — local (`models/llm_mt.py`) and hosted
+(`models/openai_compat_mt.py`), which additionally forbids quotation marks:
+
+```
+Translate the following medical text from {source_lang} to {target_lang}.
+Return only the translation, with no explanation[, no preamble, and no quotation marks].
+
+{text}
+```
+
+**Glossary arms** ([`inference/glossary_mt.py`](src/medmt_eval/inference/glossary_mt.py)) —
+the block is empty in the `none` arm, so that prompt carries no trace of a
+glossary having been considered:
+
+```
+You are translating a medical document from {source_lang} to {target_lang}.
+{glossary_block}
+Return only the translation. No preamble, no commentary, no quotation marks.
+
+{text}
+```
+
+The injected block is rendered as `- <source term> = <target term>` lines under
+the header *"Approved terminology for this text. Where the source uses the term
+on the left, the translation must use the term on the right."*
+
+**Debate and cascade personas** are in
+[`inference/debate.py`](src/medmt_eval/inference/debate.py) and
+[`inference/cascade.py`](src/medmt_eval/inference/cascade.py); the clinical
+judge rubric is in [`metrics/llm_judge.py`](src/medmt_eval/metrics/llm_judge.py).
+
+### 4. Experiment protocols
+
+#### 4.1 Single-pass benchmark
+
+All 13 systems over PARROT-DE (296), EMEA (400), HimL 2015 (353), HimL 2017 (119).
+Per-adapter defaults; both evaluation layers. DeepL: PARROT-DE only.
+
+#### 4.2 Round-trip
+
+| Setting | Value |
+|---|---|
+| Cycles | 10 (= **20 translation passes**) |
+| Sample | 20 reports, deterministic length-stratified, **seed 13** |
+| Beams | 1 |
+| Term bank | `radiology_en_de_starter.csv` (9 entries) |
+| Anchors | English steps → human English reference; German steps → original German |
+
+Every system sees the **same** 20 reports. Full corpus × 10 cycles was ~168
+GPU-hours, past every wall-clock limit. Recorded per step: `clinical_vs_origin`
+(cumulative drift) and `clinical_vs_input` (which hop introduced the error).
+
+#### 4.3 Dictionary injection
+
+| Setting | Value |
+|---|---|
+| Arms | `none` / `glossary` / `distractor` |
+| Sample | 40 (whole-report runs), 109 (medical-text runs), seed 13 |
+| Max terms/doc | 30 |
+| Glossary | `wikidata_med.csv` (default) or `merged_de_en.csv` / `radlex_findings_de_en.csv` |
+| Branch filter | `ACE` (MeSH anatomy / disease / diagnostics) |
+| Model | `local:Qwen/Qwen3.5-4B` |
+
+The `distractor` arm injects the **same number** of terms that do *not* occur in
+the document — the control that distinguishes "the terms helped" from "the block
+helped". `--holdout F` splits the glossary by concept so injected and scored
+terms are disjoint.
+
+#### 4.4 Multi-agent debate
+
+Three agents, disjoint glossary slices, **2 rounds** plus synthesis, 20–40 reports.
+Default backends: `Qwen/Qwen3.5-4B`, `tencent/Hy-MT2-7B`,
+`google/medgemma-1.5-4b-it`. Personas map one-to-one onto the critical detectors
+(anatomist → laterality, safety → negation/numbers, linguist → terminology).
+Convergence is checked on whitespace- and case-normalised text. **Every agent's
+round-0 solo proposal is scored alongside the debate output.**
+
+#### 4.5 Review cascade
+
+Three stages, scored separately: `translate` (`Hy-MT2-7B`) → `terminologise`
+(`Qwen3.5-4B` **with** `merged_de_en.csv`) → `arbitrate` (`Qwen3.5-4B`
+**without** the glossary). Only the terminologist sees the dictionary; the
+arbiter exists to catch corrections the glossary got wrong.
+
+Reply format requires **`TRANSLATION:` first**, note second, so truncation costs
+the optional field rather than the translation — and `parse_failures` is reported
+per stage. Both properties are consequences of a run where 17 of 40 replies were
+scored as their own commentary.
+
+#### 4.6 COMET
+
+`Unbabel/wmt22-comet-da`, reference-based, over existing outputs — no
+retranslation. Runs from an isolated `.venv-comet` (transformers 4.57.6,
+`setuptools<81`); it cannot share the project environment.
+
+#### 4.7 LLM judge
+
+Clinical rubric with eight categories (negation, laterality, measurement,
+anatomy, finding, certainty, terminology, omission), severity by effect on
+patient management, scored against the **source** only. Refuses to grade a model
+against itself; counts unparseable replies separately. Implemented but **not yet
+run at scale**.
+
+### 5. Evaluation configuration
+
+**Surface** — sacreBLEU 2.6.0, signatures persisted with every result:
+
+```
+BLEU  |nrefs:1|case:mixed|eff:yes|tok:13a|smooth:exp|version:2.6.0
+chrF++|nrefs:1|case:mixed|eff:yes|nc:6|nw:2|space:no|version:2.6.0
+TER   |nrefs:1|case:lc|tok:tercom|norm:no|punct:yes|asian:no|version:2.6.0
+```
+
+Corpus scores use sacreBLEU's corpus scorers, not the mean of sentence scores.
+
+**Clinical** — source-vs-output detectors
+([`taxonomy/clinical.py`](src/medmt_eval/taxonomy/clinical.py)):
+
+| Detector | Severity |
+|---|---|
+| `negation_dropped`, `negation_introduced` | critical |
+| `laterality_missing_or_flipped`, `laterality_added_or_flipped` | critical |
+| `number_or_measurement_mismatch` | critical |
+| `terminology_not_preserved` | **major** — contributes **zero** to `crit%` |
+
+Headline metric = share of **documents** with ≥1 critical finding.
+
+**Statistics** — exact McNemar on paired critical-error incidence; paired
+bootstrap (2,000 resamples, seed 13) for BLEU deltas. At n=20 the error rate
+moves in 5-point steps and at n=40 in 2.5-point steps; finer differences are not
+interpretable.
+
+**Selection** — there are no checkpoints to select. What is "selected" is an
+experimental arm or variant, and every arm is reported rather than only the best.
+
+### 6. Environment and reproducibility
+
+| | |
+|---|---|
+| Main venv | transformers **5.15.1** (required for `qwen3_5`) |
+| COMET venv | `.venv-comet`, transformers 4.57.6, `setuptools<81` |
+| Offline | `HF_HUB_DISABLE_XET=1`; compute nodes have no outbound network, so checkpoints are pre-fetched on the login node |
+| Allocator | `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` |
+| Seeds | `RT_SEED=13`, `EXP_SEED=13` |
+| Persisted per row | full `generation_config`, sacreBLEU signature, served model string, `model_substitution` flag |
+
+Every launcher preflights before requesting work: credentials, gated-repo access,
+API reachability, chat-template capability, glossary size, cached checkpoints.

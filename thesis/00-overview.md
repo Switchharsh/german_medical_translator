@@ -44,10 +44,18 @@ truth, not a model agreeing with itself.
   n-gram matching. See [07-metric-roadmap.md](07-metric-roadmap.md).
 - **Degradation is front-loaded and converges.** 77% of all BLEU lost across ten
   round trips is lost in the *first* one; after cycle 2 the text reaches a fixed
-  point rather than decaying without bound. True of all twelve systems.
+  point rather than decaying without bound. True of all twelve systems in the figure;
+  DeepL, added later, is the slowest to settle (63% in the first cycle, and 4.0 BLEU more
+  lost after cycle 2 than any other system).
 - **Round-trip stability is a separate axis from single-pass quality.**
   `translategemma-27b` ties `qwen35-27b` on one pass (57.1 vs 57.6) and loses
   12.3 BLEU round-tripping against qwen's 5.0.
+- **The commercial baseline does not change this.** DeepL, on the free API plan, is
+  sixth of thirteen on negation and laterality (6.8% of documents), fourth on BLEU, and
+  less stable under ten round trips than any of the three leading hosted LLMs (−10.8
+  BLEU against −3.8 to −5.7). Ranked on the words alone the order differs from the
+  standard one: `opus` is the worst system, not a middling one, because it emits fewer
+  numbers to get wrong. See [05-results.md](05-results.md).
 - **Every system fails often.** The best single-pass critical-error rate among
   high-quality systems is 30% of reports. That is the finding that matters for
   the original question.
@@ -57,7 +65,7 @@ truth, not a model agreeing with itself.
 - **Injecting a dictionary does not help, and a *bigger* dictionary hurts.** With
   a 47,997-entry RadLex bank the relevant glossary scored *below* an
   equally-sized block of irrelevant terms on every metric. The mechanism is
-  measurable: 26% of injected terms the model adopted are terms the human
+  measurable: 21% of injected terms the model adopted are terms the human
   reference does not use, because an ontology's preferred label is not report
   register. Only the distractor control makes this visible.
 - **A three-model debate improved fluency and not safety** — and on the
@@ -73,6 +81,32 @@ truth, not a model agreeing with itself.
   2,777 validated clinical findings — and that smallest bank produced the only
   directional clinical improvement seen in the project (11.9% vs a 12.8% control,
   p = 0.250, not significant).
+- **A glossary mined from the corpus itself does not rescue it either, and shows
+  why.** Terms mined from PARROT's own training half are adopted at 90.6%, the
+  highest rate in the project — so the terms are report register and the model
+  does take them. But the share of adopted terms the reference does not use falls
+  only from 20.8% to 17.6%. The residue is **the corpus disagreeing with
+  itself**: `Beurteilung` is rendered *conclusion* 57% of the time, *impression*
+  36% and *assessment* 7%, so even the best possible single term pair is wrong on
+  four reports in ten. Register mismatch explains about three points of the
+  original failure in aggregate; roughly seventeen are irreducible reference
+  variance.
+- **Useful terms and improvable terms are disjoint sets.** Screening the mined
+  pairs against what the baselines already produce splits them cleanly and
+  oppositely: the 59 terms the models get right anyway are ~92% correctly mined,
+  while the 28 with real headroom are only ~39% correctly mined and inject
+  non-reference wording 43.6% of the time. In the arm comparison that isolates
+  the terms from the prompt block, the headroom bank is worth **−0.12 BLEU
+  against randomly chosen irrelevant terms** (p = 0.45) — no signal at all. A
+  term with a stable one-to-one rendering is easy for the aligner *and* easy for
+  the model, for the same reason; a term the model gets wrong is context-dependent,
+  and a context-free glossary entry cannot express it.
+- **Most of the failures are unreachable by construction, and this is now
+  computed rather than asserted.** On the held-out 100 documents, 15 of the 22
+  documents carrying a critical error fail on numbers alone, and the rest are
+  mostly *dropped* laterality — an omission a term pair cannot repair. The
+  reachable ceiling for any terminology intervention is 7 documents in 100. The
+  run of null results is what that ceiling predicts.
 
 Full numbers in [05-results.md](05-results.md).
 
@@ -81,7 +115,7 @@ Full numbers in [05-results.md](05-results.md).
 | File | Contents |
 |---|---|
 | [01-dataset.md](01-dataset.md) | Corpora, why PARROT, licensing and provenance |
-| [02-models.md](02-models.md) | The thirteen systems and how each is run |
+| [02-models.md](02-models.md) | The fourteen entries (thirteen systems and a control) and how each is run |
 | [03-methods.md](03-methods.md) | Two-layer evaluation, chunking, round-trip design |
 | [04-experiments.md](04-experiments.md) | What was run, on what hardware, what failed |
 | [05-results.md](05-results.md) | Scores, figures, interpretation |
@@ -92,7 +126,7 @@ Full numbers in [05-results.md](05-results.md).
 
 ## Status
 
-**2026-08-22.** All thirteen systems have completed the single-pass benchmark and
+**2026-09-29.** All thirteen systems have completed the single-pass benchmark and
 the ten-cycle round-trip. Figures generated. Beyond that:
 
 | Work | State |
@@ -106,23 +140,37 @@ the ten-cycle round-trip. Figures generated. Beyond that:
 | Experiments 1 and 2 on the medical-text corpus | done — [09](09-experiments-glossary-debate.md) |
 | COMET over all systems | done — [07](07-metric-roadmap.md) |
 | LLM-as-judge with a clinical rubric | implemented, not yet run at scale |
-| DeepL baseline | **not started** — [07](07-metric-roadmap.md) |
+| Experiment 4, glossary mined from the corpus (train/val split) | done — [09](09-experiments-glossary-debate.md) |
+| DeepL baseline (single pass + round trip) | done 2026-09-29 — [05](05-results.md), [07](07-metric-roadmap.md) |
+| DeepL glossary arm | **not started**; free-plan glossary creation untested — [07](07-metric-roadmap.md) |
 | Human MQM validation | not started; the binding constraint is clinician time |
 
 **No model has been fine-tuned, and on the current evidence none should be yet.**
-Six interventions have now been tried — a small dictionary, a large one, a
-validated small one, a three-agent debate, a three-stage cascade, and restricting
-the corpus to medical text only. **Not one produced a statistically significant
-improvement in clinical error rate.** Several made it worse.
+Seven interventions have now been tried — a small dictionary, a large one, a
+validated small one, one mined from the corpus' own training half, a three-agent
+debate, a three-stage cascade, and restricting the corpus to medical text only.
+**Not one produced a statistically significant improvement in clinical error
+rate.** Several made it worse.
 
-That is not evidence the problem is unfixable. It is evidence of two things:
-the failures are concentrated in numbers and measurements, where terminology and
-committee methods cannot reach by construction; and the instrument may not be
-able to see the fixes that do exist — the debate transcripts contain correct,
-specific catches (`NBKS`, `LWK`) that no detector can score.
+That is not evidence the problem is unfixable, and as of Experiment 4 it is no
+longer even a surprise. Three things are now measured rather than suspected:
+
+- **The reachable headroom is 7 documents in 100.** Two thirds of the critical
+  errors are numeric, which no terminology or committee method touches; most of
+  the remainder are omissions. A null was the arithmetically predicted outcome.
+- **The reference cannot adjudicate the interventions that remain.** Where the
+  corpus renders one German term four ways, a single-reference lexical metric
+  cannot separate a wrong term from a correct synonym, so part of the measured
+  "cost" of every glossary was the metric, not the translation.
+- **The instrument cannot see the fixes that do exist** — the debate transcripts
+  contain correct, specific catches (`NBKS`, `LWK`) that no detector can score.
+
+The first of those bounds the value of further intervention work on this corpus;
+the second and third say the next real progress is in measurement.
 
 The honest next step remains the metric work in
 [07-metric-roadmap.md](07-metric-roadmap.md), and the single most informative
-missing experiment is **DeepL** — because it applies glossaries inside the
-decoder rather than as a prompt instruction, and so separates "dictionaries do
-not help" from "*prompt-injected* dictionaries do not help".
+missing experiment is now the **DeepL glossary arm** — because DeepL applies glossaries
+inside the decoder rather than as a prompt instruction, and so separates "dictionaries do
+not help" from "*prompt-injected* dictionaries do not help". The DeepL *benchmark* is
+done; this is the half of the DeepL question that remains.
